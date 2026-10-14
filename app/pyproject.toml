@@ -1,0 +1,24 @@
+[project]
+name = "cards-warehouse"
+version = "0.1.0"
+description = "Multichannel inventory for trading cards"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.1",
+    "uvicorn>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = ["acceptance: builds and runs the Docker image, needs a running Docker daemon"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]

@@ -1,0 +1,58 @@
+# --- Secrets and credentials: never in Git ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials
+credentials-velero
+.aws/
+
+# --- Kubernetes ---
+*kubeconfig*
+.kube/
+
+# --- Terraform ---
+# State holds resource attributes, often secrets: it lives in S3, never here.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfplan
+# .terraform.lock.hcl is committed on purpose: it pins provider versions.
+
+# --- Helm ---
+chart/**/charts/*.tgz
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Editors and OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Local planning notes (Italian PRD and tasks), not published ---
+.scratch/
+.claude/

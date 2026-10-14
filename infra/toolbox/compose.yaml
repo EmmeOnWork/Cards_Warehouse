@@ -1,0 +1,19 @@
+services:
+  toolbox:
+    build: .
+    image: cards-warehouse-toolbox:local
+    working_dir: /work
+    volumes:
+      # The repository, edited on the PC and used inside the container.
+      - ../..:/work
+      # AWS CLI profile and the temporary credentials of `aws login`, kept across runs.
+      - ~/.aws:/root/.aws
+      # Provider binaries (the AWS one is ~800 MB) on a Linux volume: reading them
+      # from the Windows folder made every terraform command 20 seconds slower.
+      - terraform-plugins:/root/.terraform.d/plugin-cache
+    environment:
+      AWS_PAGER: ""
+      TF_PLUGIN_CACHE_DIR: /root/.terraform.d/plugin-cache
+
+volumes:
+  terraform-plugins:

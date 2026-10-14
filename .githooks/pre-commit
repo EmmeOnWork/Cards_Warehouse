@@ -1,0 +1,16 @@
+#!/bin/sh
+# Blocks the commit when the staged changes contain a secret.
+# gitleaks runs from its official image, the same one the pipeline uses.
+# Enabled once per clone with: make hooks
+set -eu
+
+# Git Bash on Windows would rewrite /repo into a Windows path.
+export MSYS_NO_PATHCONV=1
+
+repo=$(git rev-parse --show-toplevel)
+
+exec docker run --rm \
+  --mount "type=bind,source=$repo,target=/repo" \
+  --workdir /repo \
+  ghcr.io/gitleaks/gitleaks:v8.30.1 \
+  git --pre-commit --staged --redact --verbose
