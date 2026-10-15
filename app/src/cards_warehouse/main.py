@@ -10,7 +10,8 @@ def create_app() -> FastAPI:
 
     @app.get("/livez")
     def liveness() -> dict[str, str]:
-        return {"status": "ok"}
+        # EXPERIMENT E1, never merged: a bug the tests must catch before the build.
+        return {"status": "ko"}
 
     @app.get("/readyz")
     def readiness() -> dict[str, str]:
