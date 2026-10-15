@@ -19,7 +19,7 @@ make shell                # a shell with terraform and aws, the repository in /w
 aws login --remote        # inside the shell: temporary credentials, no access keys on disk
 ```
 
-`aws login` signs in with the console user and its MFA, and keeps the session for up to 12 hours.
+The account was created with the new AWS sign-up experience: there is no root user, and the AWS Builder ID (with its MFA, managed in [AWS Settings](https://settings.aws.com)) owns the project account. `aws login` signs in with the Builder ID and receives temporary credentials of the project's `AccountFullAccessRole`, for up to 12 hours. IAM users can exist, but only for programmatic access: that is all `cards-warehouse-app` needs.
 
 ## Checks
 
@@ -28,7 +28,7 @@ make tf-check                              # format, validity and unit tests: no
 bash infra/foundations/tests/acceptance.sh # inside make shell: the real account
 ```
 
-The unit tests in [tests/foundations.tftest.hcl](tests/foundations.tftest.hcl) check the plan against a mock AWS provider. The acceptance test checks what AWS actually does.
+The unit tests in [tests/foundations.tftest.hcl](tests/foundations.tftest.hcl) check the plan against a mock AWS provider. The acceptance test checks what AWS actually does: the state lock, the buckets, the budget, and the app credential through a temporary access key that the test creates, never prints, and deletes before it ends.
 
 ## Bootstrap, once per AWS account
 
@@ -59,10 +59,10 @@ Terraform creates the `cards-warehouse-app` user and its permissions, never its 
 
 ## Costs and the AWS free plan
 
-Checked on 2026-10-14 against the [AWS free plan documentation](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html) and the S3 price list published by AWS on 2026-10-12.
+Checked on 2026-10-15 against the AWS documentation of the [new sign-up experience](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html) and the S3 price list published by AWS on 2026-10-14.
 
-- New accounts get 100 USD of credits, plus up to 100 USD for completing activities. On the free plan nothing is ever charged.
-- The free plan ends after six months or when the credits run out, whichever comes first. The account then closes, and AWS deletes its data after 90 days unless it is upgraded to the paid plan.
-- Joining AWS Organizations upgrades the account to the paid plan automatically. This is why there is no IAM Identity Center here: it needs Organizations to grant access to the account.
-- S3 Standard in eu-central-1: 0.0245 USD per GB-month, 0.0054 USD per 1,000 PUT/LIST requests, 0.00043 USD per 1,000 GET requests. A few GB of photos and backups cost cents per month.
+- The account is a *project* inside an AWS Organization that AWS manages. AWS service control policies pin it to one Region, **eu-north-1** (Stockholm, chosen from the contact address): creating a bucket anywhere else is denied. Only [activating advanced features](https://docs.aws.amazon.com/accounts/latest/reference/activate-advanced-features.html) would allow other Regions.
+- The same policies deny console passwords for IAM users and account aliases. Access keys, IAM users and policies, S3 and Budgets are allowed. Verified on 2026-10-15 with the IAM policy simulator, which also evaluates the organization's policies.
+- The free tier gives 100 USD of credits, plus up to 100 USD for completing activities. When the credits run out or the account is six months old, it [must be upgraded](https://docs.aws.amazon.com/accounts/latest/reference/upgrade-account.html) to the paid plan, which cannot be reversed. On the paid plan a project can have a spend limit (from 20 USD per month) that pauses it instead of charging more.
+- S3 Standard in eu-north-1: 0.023 USD per GB-month, 0.005 USD per 1,000 PUT/LIST requests, 0.0004 USD per 1,000 GET requests. A few GB of photos and backups cost cents per month.
 - Before the sixth month: upgrade to the paid plan, or move photos and backups elsewhere.
