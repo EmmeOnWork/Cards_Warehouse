@@ -3,11 +3,18 @@ services:
     build: .
     image: cards-warehouse-toolbox:local
     working_dir: /work
+    # The network of the Docker host, where kind publishes the cluster API and the
+    # Argo CD UI on 127.0.0.1: the kubeconfig written by kind works unchanged.
+    network_mode: host
     volumes:
       # The repository, edited on the PC and used inside the container.
       - ../..:/work
       # AWS CLI profile and the temporary credentials of `aws login`, kept across runs.
       - ~/.aws:/root/.aws
+      # The PC's Docker: kind creates the cluster nodes as containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The kubeconfig of the cluster, kept across runs and out of the repository.
+      - kube-config:/root/.kube
       # Provider binaries (the AWS one is ~800 MB) on a Linux volume: reading them
       # from the Windows folder made every terraform command 20 seconds slower.
       - terraform-plugins:/root/.terraform.d/plugin-cache
@@ -16,4 +23,5 @@ services:
       TF_PLUGIN_CACHE_DIR: /root/.terraform.d/plugin-cache
 
 volumes:
+  kube-config:
   terraform-plugins:

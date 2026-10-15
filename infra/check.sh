@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 terraform fmt -check -recursive
-for module in foundations; do
+for module in foundations platform; do
   terraform -chdir="$module" init -backend=false -input=false >/dev/null
   terraform -chdir="$module" validate
   terraform -chdir="$module" test

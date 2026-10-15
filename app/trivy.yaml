@@ -1,0 +1,12 @@
+# The scan gate: `trivy image <image>`, run from app/, reads this file by default.
+# An image with a HIGH or CRITICAL vulnerability that already has a fix is not published.
+# Flaws without a fix do not block: rebuilding could not remove them.
+severity:
+  - HIGH
+  - CRITICAL
+exit-code: 1
+scan:
+  scanners:
+    - vuln
+vulnerability:
+  ignore-unfixed: true

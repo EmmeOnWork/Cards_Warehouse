@@ -5,14 +5,18 @@ services:
       target: dev
     image: cards-warehouse-dev:local
     volumes:
-      # The app sources, edited on the PC and used inside the container.
-      - .:/work/app
+      # The repository, edited on the PC and used inside the container (which works in
+      # app/). The whole repository, so the linters also see the pipeline in .github/.
+      - ..:/work
       # The PC's Docker: the acceptance tests build and run the real image with it.
       - /var/run/docker.sock:/var/run/docker.sock
       # Virtual environment and download cache, kept across runs.
       - venv:/venv
       - uv-cache:/root/.cache/uv
+      # The vulnerability database of trivy, downloaded once a day instead of at every scan.
+      - trivy-cache:/root/.cache/trivy
 
 volumes:
   venv:
   uv-cache:
+  trivy-cache:

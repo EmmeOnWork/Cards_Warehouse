@@ -15,10 +15,18 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
-markers = ["acceptance: builds and runs the Docker image, needs a running Docker daemon"]
+markers = ["acceptance: builds, pulls, runs or scans Docker images, needs a running Docker daemon"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# Errors, undefined names, import order, outdated syntax, likely bugs.
+select = ["E", "F", "I", "UP", "B"]
 
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
+    "ruff==0.16.10",
 ]

@@ -20,10 +20,15 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 | Command | What it does |
 |---|---|
 | `make hooks` | Enables the secret check before every commit, once per clone |
+| `make lint` | Checks the style of the Python code (ruff) and of the pipeline (actionlint) |
 | `make test` | Runs the app tests, including the ones that build and run the real image |
-| `make app-shell` | Opens a shell with Python, uv and the Docker CLI, in `app/` |
-| `make shell` | Opens a shell with Terraform and the AWS CLI |
+| `make scan IMAGE=<image>` | Fails when the image has a HIGH or CRITICAL vulnerability with a fix |
+| `make verify-published SHA=<commit>` | Checks that the image published for a commit is public and reports that commit |
+| `make app-shell` | Opens a shell with Python, uv, the Docker CLI, trivy and actionlint, in `app/` |
+| `make shell` | Opens a shell with Terraform, the AWS CLI and kubectl |
 | `make tf-check` | Checks format and validity of the Terraform code and runs its tests |
+| `make platform-up` | Creates the kind cluster with Argo CD, which then applies [gitops/](gitops/) |
+| `make platform-down` | Destroys the cluster, leaving the AWS foundations untouched |
 
 ## Secret protection
 
@@ -31,4 +36,21 @@ The repository is public, so no secret may ever enter Git. Three checks stand in
 
 1. **Before every commit**, a [gitleaks](https://github.com/gitleaks/gitleaks) hook scans the staged changes, running the official gitleaks image. Enable it with `make hooks`.
 2. **On push**, GitHub push protection rejects known token formats.
-3. **In the pipeline** (not built yet), the same gitleaks image will scan the whole history.
+3. **In the pipeline**, the same gitleaks image scans the whole history.
+
+## Pipeline
+
+[GitHub Actions](.github/workflows/pipeline.yaml) runs on every push on `main` and on every pull request:
+
+```
+secrets ─┐
+         ├─► image ─► published
+checks ──┘
+```
+
+- **secrets**: gitleaks over every commit.
+- **checks**: `make lint` and `make test`.
+- **image**: builds the image with the commit as its version, then `make scan` with [Trivy](app/trivy.yaml). On `main` only, it pushes `ghcr.io/emmeonwork/cards-warehouse:<commit>`, logged in with the token GitHub gives to the run.
+- **published**: on `main` only, `make verify-published` pulls the image without credentials and checks its version.
+
+Pull requests run the checks and the scan but publish nothing. Every step is a `make` target or a pinned image, the same as on the PC. The only action, `actions/checkout`, is pinned by commit.

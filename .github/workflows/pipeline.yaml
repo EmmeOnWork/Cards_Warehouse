@@ -1,0 +1,81 @@
+# Every push on main publishes a checked, tested and scanned image to GHCR, tagged with its commit.
+# Pull requests run the same checks and the scan, but publish nothing.
+# Each step runs a make target or a pinned image, as on the PC: no logic lives only here.
+name: pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# No permission by default: each job asks for what it needs.
+permissions: {}
+
+env:
+  IMAGE: ghcr.io/emmeonwork/cards-warehouse:${{ github.sha }}
+
+jobs:
+  secrets:
+    name: no secret in the history
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      # Pinned by commit: a tag can be moved to other code, a commit cannot.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history: a secret deleted by a later commit is still in Git.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan every commit with gitleaks, the same image as the pre-commit hook
+        run: docker run --rm --volume "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --verbose
+
+  checks:
+    name: style and tests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make lint
+      - run: make test
+
+  image:
+    name: build, scan and publish
+    # A failing check or test stops the pipeline before the build.
+    needs: [secrets, checks]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the image, with the commit as its version
+        run: docker build --build-arg "APP_VERSION=$GITHUB_SHA" --tag "$IMAGE" app
+      - name: Scan it, a HIGH or CRITICAL vulnerability with a fix stops here
+        run: make scan IMAGE="$IMAGE"
+      - name: Publish it to GHCR, logged in with the token GitHub gives to this run
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE"
+
+  published:
+    name: published image is public and reports its commit
+    needs: image
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    # No package permission and no login: the pull must work for anyone.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make verify-published SHA="$GITHUB_SHA"
