@@ -38,8 +38,7 @@ WORKDIR /work/app
 CMD ["bash"]
 
 # --- runtime: only the virtual environment, no uv, no sources ---
-# EXPERIMENT, to be reverted: a deliberately old base, which the scan must stop.
-FROM python:3.12.0-slim-bookworm
+FROM python:3.12-slim-trixie
 COPY --from=build /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 # Numeric user, so Kubernetes can verify runAsNonRoot.
