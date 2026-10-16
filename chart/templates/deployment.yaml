@@ -23,6 +23,7 @@ spec:
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ required "image.tag: the commit to run" .Values.image.tag }}"
+          imagePulPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
