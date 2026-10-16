@@ -4,7 +4,7 @@ resource "kind_cluster" "this" {
   # kind release notes recommend. Kubernetes 1.35+ refuses cgroup v1 hosts, and Docker
   # Desktop on this PC (WSL 2.4, kernel 5.15) still runs cgroup v1: see README.md.
   node_image     = "kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
-  wait_for_ready = true
+  wait_for_ready    = true
   # Without a path, the provider exports the kubeconfig into the working directory,
   # inside the repository. In the toolbox, ~/.kube is a Docker volume.
   kubeconfig_path = pathexpand("~/.kube/config")
