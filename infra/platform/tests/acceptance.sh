@@ -132,8 +132,9 @@ app() { # app <kubectl arguments...>: kubectl in the app's namespace
 image_pulled_from_ghcr_without_credentials() {
   local pods image secrets
   pods=(get pods -l app.kubernetes.io/name=cards-warehouse)
-  image=$(app "${pods[@]}" -o jsonpath='{.items[0].status.containerStatuses[0].imageID}')
-  secrets=$(app "${pods[@]}" -o jsonpath='{.items[0].spec.imagePullSecrets}')$(app get serviceaccount default -o jsonpath='{.imagePullSecrets}')
+  # With no pod, items[0] is an error: the message below already says so.
+  image=$(app "${pods[@]}" -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null)
+  secrets=$(app "${pods[@]}" -o jsonpath='{.items[0].spec.imagePullSecrets}' 2>/dev/null)$(app get serviceaccount default -o jsonpath='{.imagePullSecrets}')
   [[ $image == ghcr.io/emmeonwork/cards-warehouse@sha256:* && -z $secrets ]] || {
     echo "      image: ${image:-none}; pull secrets: ${secrets:-none}"
     return 1
