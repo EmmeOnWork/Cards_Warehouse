@@ -19,7 +19,7 @@ resource "kind_cluster" "this" {
       # The PC reaches the cluster only through these ports, on its loopback:
       # nothing is published on the home network.
       extra_port_mappings {
-        container_port = local.argocd_nodeport
+        container_port = local.argocd_node_port
         host_port      = 8090
         listen_address = "127.0.0.1"
       }
