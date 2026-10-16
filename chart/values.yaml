@@ -1,0 +1,30 @@
+image:
+  repository: ghcr.io/emmeonwork/cards-warehouse
+  # The commit whose image runs, set by the Argo CD Application in gitops/apps.
+  tag: ""
+
+# Always written into the Deployment: without it, Argo CD could not tell that a hand change drifted from Git.
+replicas: 1
+
+service:
+  # The kind cluster maps this node port to 127.0.0.1:8000 on the PC (infra/platform/cluster.tf).
+  nodePort: 30000
+
+# A failing liveness probe restarts the container; while readiness fails, the pod gets no traffic.
+livenessProbe:
+  httpGet:
+    path: /livez
+    port: http
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+
+# Measured on 2026-10-16: about 51 MiB after 600 requests. No CPU limit, so a burst is
+# never throttled; the memory limit stops a leak before it hurts the rest of the PC.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

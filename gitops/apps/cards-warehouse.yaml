@@ -1,0 +1,27 @@
+# The app: Argo CD renders the Helm chart in chart/ from main, with the image of the commit below.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cards-warehouse
+  namespace: argocd
+  # Deleting this Application also deletes what it installed, instead of leaving it running.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/EmmeOnWork/Cards_Warehouse.git
+    targetRevision: main
+    path: chart
+    helm:
+      valuesObject:
+        image:
+          # The commit whose image runs in the cluster: the one version of the app in Git.
+          tag: f49325cabe03f0965cb89abd6f08f87b886946a7
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cards-warehouse
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

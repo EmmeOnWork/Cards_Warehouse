@@ -1,0 +1,6 @@
+apiVersion: v2
+name: cards-warehouse
+description: Multichannel inventory for trading cards
+type: application
+# The chart's own version. The app's version is the image tag, set by the Argo CD Application.
+version: 0.1.0

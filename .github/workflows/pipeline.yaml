@@ -42,10 +42,25 @@ jobs:
       - run: make lint
       - run: make test
 
+  platform:
+    name: terraform and chart
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Format, validity and unit tests against mock providers: no AWS credential needed.
+      - run: make tf-check
+      # Lint, unit tests, and the rendered manifests against the Kubernetes schemas.
+      - run: make chart-check
+
   image:
     name: build, scan and publish
-    # A failing check or test stops the pipeline before the build.
-    needs: [secrets, checks]
+    # A failing check or test stops the pipeline before the build: an image is never
+    # published for a commit whose chart or Terraform is broken.
+    needs: [secrets, checks, platform]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

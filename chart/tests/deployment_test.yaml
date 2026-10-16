@@ -1,0 +1,66 @@
+suite: the app's Deployment
+templates:
+  - templates/deployment.yaml
+# The Argo CD Application always gives the commit to run.
+set:
+  image.tag: 0123abc
+tests:
+  - it: runs the image of the commit given in the values
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/emmeonwork/cards-warehouse:0123abc
+
+  - it: always writes the replica count, so Argo CD sees a change made by hand
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: probes the app on its liveness and readiness endpoints
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+          value: { path: /livez, port: http }
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+          value: { path: /readyz, port: http }
+
+  - it: gives the container the resources set in the values
+    set:
+      resources:
+        requests: { cpu: 100m, memory: 64Mi }
+        limits: { memory: 64Mi }
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests: { cpu: 100m, memory: 64Mi }
+            limits: { memory: 64Mi }
+
+  - it: meets the restricted Pod Security Standard, which the namespace enforces
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            seccompProfile: { type: RuntimeDefault }
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+
+  - it: gives the pod no Kubernetes API token, since the app never calls the API
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: refuses to render without a commit, instead of running an unknown version
+    set:
+      image.tag: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: image.tag

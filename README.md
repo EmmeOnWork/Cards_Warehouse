@@ -25,9 +25,10 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 | `make scan IMAGE=<image>` | Fails when the image has a HIGH or CRITICAL vulnerability with a fix |
 | `make verify-published SHA=<commit>` | Checks that the image published for a commit is public and reports that commit |
 | `make app-shell` | Opens a shell with Python, uv, the Docker CLI, trivy and actionlint, in `app/` |
-| `make shell` | Opens a shell with Terraform, the AWS CLI and kubectl |
+| `make shell` | Opens a shell with Terraform, the AWS CLI, kubectl and Helm |
 | `make tf-check` | Checks format and validity of the Terraform code and runs its tests |
-| `make platform-up` | Creates the kind cluster with Argo CD, which then applies [gitops/](gitops/) |
+| `make chart-check` | Lints the Helm chart, runs its unit tests and validates what it renders against the Kubernetes schemas |
+| `make platform-up` | Creates the kind cluster with Argo CD, which then applies [gitops/](gitops/): the app answers at <http://localhost:8000> |
 | `make platform-down` | Destroys the cluster, leaving the AWS foundations untouched |
 
 ## Secret protection
@@ -43,13 +44,14 @@ The repository is public, so no secret may ever enter Git. Three checks stand in
 [GitHub Actions](.github/workflows/pipeline.yaml) runs on every push on `main` and on every pull request:
 
 ```
-secrets ─┐
-         ├─► image ─► published
-checks ──┘
+secrets ──┐
+checks ───┼─► image ─► published
+platform ─┘
 ```
 
 - **secrets**: gitleaks over every commit.
 - **checks**: `make lint` and `make test`.
+- **platform**: `make tf-check` and `make chart-check`. An image is never published for a commit whose Terraform or chart is broken.
 - **image**: builds the image with the commit as its version, then `make scan` with [Trivy](app/trivy.yaml). On `main` only, it pushes `ghcr.io/emmeonwork/cards-warehouse:<commit>`, logged in with the token GitHub gives to the run.
 - **published**: on `main` only, `make verify-published` pulls the image without credentials and checks its version.
 

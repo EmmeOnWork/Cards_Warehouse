@@ -37,6 +37,18 @@ run "the_pc_port_leads_to_the_argocd_ui" {
   }
 }
 
+run "the_pc_port_8000_leads_to_the_app" {
+  command = plan
+
+  assert {
+    condition = contains([
+      for m in flatten([for node in flatten(kind_cluster.this.kind_config[*].node) : node.extra_port_mappings]) :
+      m.container_port if m.host_port == 8000
+    ], 30000)
+    error_message = "Port 8000 of the PC must lead to node port 30000, where the chart publishes the app."
+  }
+}
+
 run "root_application_follows_main_and_undoes_manual_changes" {
   command = plan
 

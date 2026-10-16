@@ -23,6 +23,12 @@ resource "kind_cluster" "this" {
         host_port      = 8090
         listen_address = "127.0.0.1"
       }
+      # The app, at the node port its chart gives the Service (service.nodePort).
+      extra_port_mappings {
+        container_port = 30000
+        host_port      = 8000
+        listen_address = "127.0.0.1"
+      }
     }
   }
 }

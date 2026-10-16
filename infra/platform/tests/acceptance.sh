@@ -103,6 +103,70 @@ namespace_from_git_exists() {
     -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/tracking-id}' | grep -q '^root:'
 }
 
+# The root application creates the app's Application, which installs the chart; the node
+# then pulls the image from GHCR. The Service sends traffic only to a Ready pod: allow five minutes.
+app_answers_healthy_on_the_pc() {
+  curl --silent --fail --max-time 5 --retry 30 --retry-delay 5 --retry-all-errors \
+    http://host.docker.internal:8000/readyz >/dev/null
+}
+
+# The tag in gitops/apps at the last commit of main, read from GitHub itself rather than from
+# Argo CD. A commit in the URL, not the branch: the raw files of a branch are cached for minutes.
+app_reports_the_version_in_git() {
+  local head tag version
+  head=$(git ls-remote https://github.com/EmmeOnWork/Cards_Warehouse.git refs/heads/main | cut -f1)
+  tag=$(curl --silent --fail "https://raw.githubusercontent.com/EmmeOnWork/Cards_Warehouse/$head/gitops/apps/cards-warehouse.yaml" |
+    sed -n 's/^ *tag: *//p')
+  version=$(curl --silent --fail --max-time 5 http://host.docker.internal:8000/version)
+  [[ -n $tag && $version == "{\"version\":\"$tag\"}" ]] || {
+    echo "      in Git: ${tag:-no tag}; the app reports: ${version:-nothing}"
+    return 1
+  }
+}
+
+app() { # app <kubectl arguments...>: kubectl in the app's namespace
+  kubectl --context "kind-$cluster" --namespace cards-warehouse "$@"
+}
+
+# The pod runs, so the node pulled its image; neither the pod nor its service account holds a registry login.
+image_pulled_from_ghcr_without_credentials() {
+  local pods image secrets
+  pods=(get pods -l app.kubernetes.io/name=cards-warehouse)
+  image=$(app "${pods[@]}" -o jsonpath='{.items[0].status.containerStatuses[0].imageID}')
+  secrets=$(app "${pods[@]}" -o jsonpath='{.items[0].spec.imagePullSecrets}')$(app get serviceaccount default -o jsonpath='{.imagePullSecrets}')
+  [[ $image == ghcr.io/emmeonwork/cards-warehouse@sha256:* && -z $secrets ]] || {
+    echo "      image: ${image:-none}; pull secrets: ${secrets:-none}"
+    return 1
+  }
+}
+
+# Scale by hand, as someone with kubectl would, and wait for Argo CD to restore the count in Git.
+hand_scaling_is_undone() {
+  local in_git replicas start=$SECONDS
+  in_git=$(app get deployment cards-warehouse -o jsonpath='{.spec.replicas}') || return 1
+  app scale deployment cards-warehouse --replicas=$((in_git + 2)) >/dev/null || return 1
+  while ((SECONDS - start < 300)); do
+    replicas=$(app get deployment cards-warehouse -o jsonpath='{.spec.replicas}')
+    [[ $replicas == "$in_git" ]] && { echo "      undone after $((SECONDS - start)) s"; return 0; }
+    sleep 1
+  done
+  echo "      still $replicas replicas, $in_git in Git"
+  return 1
+}
+
+# A new uid means a new object: the Service deleted by hand was created again.
+deleted_service_is_created_again() {
+  local uid now start=$SECONDS
+  uid=$(app get service cards-warehouse -o jsonpath='{.metadata.uid}') || return 1
+  app delete service cards-warehouse >/dev/null || return 1
+  while ((SECONDS - start < 300)); do
+    now=$(app get service cards-warehouse -o jsonpath='{.metadata.uid}' 2>/dev/null)
+    [[ -n $now && $now != "$uid" ]] && { echo "      created again after $((SECONDS - start)) s"; return 0; }
+    sleep 1
+  done
+  return 1
+}
+
 # Files such as the kubeconfig must never be offered to a commit.
 repository_gets_no_new_file() {
   local new
@@ -116,6 +180,11 @@ check "the cluster node is Ready" node_is_ready
 check "the Argo CD UI answers on the PC at localhost:8090" argocd_ui_answers_on_the_pc
 check "the root application is Synced and Healthy at the last commit on GitHub" root_app_is_synced_with_git
 check "the namespace declared in Git exists, applied by Argo CD" namespace_from_git_exists
+check "the app answers healthy on the PC at localhost:8000" app_answers_healthy_on_the_pc
+check "the app reports the version written in Git" app_reports_the_version_in_git
+check "the cluster pulled the image from GHCR without credentials" image_pulled_from_ghcr_without_credentials
+check "a replica count changed by hand is undone by Argo CD" hand_scaling_is_undone
+check "a Service deleted by hand is created again by Argo CD" deleted_service_is_created_again
 check "the apply writes no file into the repository" repository_gets_no_new_file
 
 # --- Destruction ---
