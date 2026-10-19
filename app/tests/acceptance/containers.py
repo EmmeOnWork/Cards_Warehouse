@@ -41,11 +41,13 @@ def pulled_without_credentials(reference: str) -> Iterator[str]:
 
 
 @contextmanager
-def running_container(image: str) -> Iterator[httpx.Client]:
+def running_container(image: str, session_secret: str = "test-session-key") -> Iterator[httpx.Client]:
     # Join this test container's network namespace, like two containers in one Pod:
     # the app is then on our localhost, with no port published on the PC.
     test_container = socket.gethostname()
-    container_id = _docker("run", "--detach", "--network", f"container:{test_container}", image)
+    # The app refuses to start without a session key, as in the cluster without its Secret.
+    environment = ["--env", f"SESSION_SECRET={session_secret}"]
+    container_id = _docker("run", "--detach", "--network", f"container:{test_container}", *environment, image)
     try:
         with httpx.Client(base_url="http://127.0.0.1:8000") as client:
             _wait_until_live(client)

@@ -26,6 +26,10 @@ succeeded() { # succeeded <exit status> <log>
   [[ $1 -eq 0 ]] || { tail -n 20 "$2"; return 1; }
 }
 
+if [[ -z ${TF_VAR_infisical_client_id:-} || -z ${TF_VAR_infisical_client_secret:-} ]]; then
+  echo "FAIL  the Infisical credential is missing: put it in ~/.cards-warehouse/platform.env, see README.md"
+  exit 1
+fi
 if [[ -n $(cluster_nodes) ]]; then
   echo "FAIL  the test starts from no cluster, but $cluster exists: run make platform-down first"
   exit 1
@@ -66,6 +70,21 @@ wait "$apply_pid"
 apply_status=$?
 echo "      terraform apply took $((SECONDS / 60)) min $((SECONDS % 60)) s"
 
+# The one secret kept by hand reaches the cluster through Terraform, yet no copy of it is left in the
+# Terraform state, in the Git history or in a file of the repository. Searched by value, not by pattern.
+infisical_credential_is_only_in_the_cluster() {
+  local secret=$TF_VAR_infisical_client_secret in_cluster
+  in_cluster=$(kubectl --context "kind-$cluster" --namespace infisical get secret infisical-credentials \
+    -o jsonpath='{.data.clientSecret}' | base64 -d)
+  [[ $in_cluster == "$secret" ]] || { echo "      not in the cluster"; return 1; }
+  if terraform state pull | grep -qF -e "$secret"; then echo "      found in the Terraform state"; return 1; fi
+  if git -C ../.. -c safe.directory='*' log --all --patch | grep -qF -e "$secret"; then
+    echo "      found in the Git history"
+    return 1
+  fi
+  if grep -rqF --exclude-dir=.git -e "$secret" ../..; then echo "      found in a file of the repository"; return 1; fi
+}
+
 node_is_ready() {
   kubectl --context "kind-$cluster" wait node --all --for=condition=Ready --timeout=120s >/dev/null
 }
@@ -101,6 +120,20 @@ root_app_is_synced_with_git() {
 namespace_from_git_exists() {
   kubectl --context "kind-$cluster" get namespace cards-warehouse \
     -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/tracking-id}' | grep -q '^root:'
+}
+
+# The root application creates the operator's Application, which installs its chart: Healthy means
+# the operator's Deployment is available. Allow three minutes, as for the root application.
+infisical_operator_installed_by_argocd() {
+  local status attempt
+  for attempt in {1..36}; do
+    status=$(argocd get application infisical-operator -o jsonpath='{.status.sync.status} {.status.health.status}' 2>/dev/null)
+    [[ $status == "Synced Healthy" ]] && return 0
+    sleep 5
+  done
+  echo "      infisical-operator: ${status:-no application}"
+  argocd get application infisical-operator -o jsonpath='{.status.conditions[*].message}{"\n"}' 2>/dev/null
+  return 1
 }
 
 # The root application creates the app's Application, which installs the chart; the node
@@ -141,6 +174,27 @@ image_pulled_from_ghcr_without_credentials() {
   }
 }
 
+# The operator copies the app's folder in Infisical into a Secret it owns; the app reports a fingerprint
+# of the session key it read at start. The same fingerprint means the same value, never printed.
+# The operator reads Infisical every minute: allow three minutes.
+app_reads_its_secret_from_infisical() {
+  local synced owner key actual attempt
+  for attempt in {1..36}; do
+    synced=$(app get infisicalstaticsecret cards-warehouse \
+      -o jsonpath='{.status.conditions[?(@.type=="secrets.infisical.com/LastReconcileStatus")].status}' 2>/dev/null)
+    owner=$(app get secret cards-warehouse-secrets -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null)
+    key=$(app get secret cards-warehouse-secrets -o jsonpath='{.data.SESSION_SECRET}' 2>/dev/null | base64 -d)
+    actual=$(curl --silent --fail --max-time 5 http://host.docker.internal:8000/session-key)
+    if [[ $synced == True && $owner == InfisicalStaticSecret && -n $key ]]; then
+      [[ $actual == "{\"fingerprint\":\"$(printf %s "$key" | sha256sum | cut -c1-16)\"}" ]] && return 0
+    fi
+    sleep 5
+  done
+  echo "      synced from Infisical: ${synced:-no}; Secret owned by: ${owner:-nobody};" \
+    "SESSION_SECRET in it: ${key:+yes}; the app reports: ${actual:-nothing}"
+  return 1
+}
+
 # Scale by hand, as someone with kubectl would, and wait for Argo CD to restore the count in Git.
 hand_scaling_is_undone() {
   local in_git replicas start=$SECONDS
@@ -177,13 +231,17 @@ repository_gets_no_new_file() {
 
 check "one terraform apply, from no cluster, succeeds" succeeded "$apply_status" "$log"
 check "the platform state lives in S3, under its own key" state_is_in_s3
+check "the Infisical credential is in the cluster, not in the state, in Git or in the repository" \
+  infisical_credential_is_only_in_the_cluster
 check "the cluster node is Ready" node_is_ready
 check "the Argo CD UI answers on the PC at localhost:8090" argocd_ui_answers_on_the_pc
 check "the root application is Synced and Healthy at the last commit on GitHub" root_app_is_synced_with_git
 check "the namespace declared in Git exists, applied by Argo CD" namespace_from_git_exists
+check "the Infisical operator is installed by Argo CD" infisical_operator_installed_by_argocd
 check "the app answers healthy on the PC at localhost:8000" app_answers_healthy_on_the_pc
 check "the app reports the version written in Git" app_reports_the_version_in_git
 check "the cluster pulled the image from GHCR without credentials" image_pulled_from_ghcr_without_credentials
+check "a secret created in Infisical reaches the cluster and the app reads it" app_reads_its_secret_from_infisical
 check "a replica count changed by hand is undone by Argo CD" hand_scaling_is_undone
 check "a Service deleted by hand is created again by Argo CD" deleted_service_is_created_again
 check "the apply writes no file into the repository" repository_gets_no_new_file

@@ -20,3 +20,8 @@ def test_container_is_healthy_and_reports_the_version_passed_at_build():
 def test_container_built_without_a_version_reports_dev():
     with built_image() as image, running_container(image) as client:
         assert client.get("/version").json() == {"version": "dev"}
+
+
+def test_container_reads_the_session_key_from_its_environment():
+    with built_image() as image, running_container(image, session_secret="a-session-key") as client:
+        assert client.get("/session-key").json() == {"fingerprint": "049874913f0fec2a"}

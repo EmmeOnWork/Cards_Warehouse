@@ -1,0 +1,31 @@
+# The Infisical operator: it copies secrets from Infisical Cloud into Kubernetes Secrets.
+# Argo CD renders its official Helm chart, at a pinned version, from Infisical's Helm repository.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infisical-operator
+  namespace: argocd
+  # Deleting this Application also deletes the operator, instead of leaving it running.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+    chart: secrets-operator
+    targetRevision: 0.11.12 # operator v0.11.12, released on 2026-10-16
+    helm:
+      valuesObject:
+        # The InfisicalConnection named "default" in this namespace: the address of Infisical Cloud,
+        # EU region, for every InfisicalAuth that names it (chart/values.yaml).
+        defaultInfisicalConnection:
+          enabled: true
+          address: https://eu.infisical.com
+  destination:
+    server: https://kubernetes.default.svc
+    # Created by Terraform, with the credential the operator signs in with (infra/platform/infisical.tf).
+    namespace: infisical
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

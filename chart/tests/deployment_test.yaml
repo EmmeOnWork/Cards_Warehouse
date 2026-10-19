@@ -64,3 +64,36 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: image.tag
+
+  - it: gives the app its session key, from the Secret the operator fills from Infisical
+    release:
+      name: cards-warehouse
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SESSION_SECRET
+            valueFrom:
+              secretKeyRef: { name: cards-warehouse-secrets, key: SESSION_SECRET }
+
+  - it: gives the app every secret listed in the values, by name only
+    release:
+      name: cards-warehouse
+    set:
+      secrets: [SESSION_SECRET, OTHER_SECRET]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef: { name: cards-warehouse-secrets, key: SESSION_SECRET }
+            - name: OTHER_SECRET
+              valueFrom:
+                secretKeyRef: { name: cards-warehouse-secrets, key: OTHER_SECRET }
+
+  - it: is restarted by the Infisical operator when a value of its secrets changes
+    asserts:
+      - equal:
+          path: metadata.annotations["secrets.infisical.com/auto-reload"]
+          value: "true"

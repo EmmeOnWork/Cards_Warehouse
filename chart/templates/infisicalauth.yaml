@@ -1,0 +1,23 @@
+# How the Infisical operator signs in to Infisical for this app: as the cluster's machine identity,
+# with the client id and secret Terraform puts in the cluster (infra/platform).
+apiVersion: secrets.infisical.com/v1beta1
+kind: InfisicalAuth
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  # The address of Infisical, held by the operator's default connection (gitops/apps/infisical-operator.yaml).
+  infisicalConnectionRef:
+    name: {{ .Values.infisical.connection.name }}
+    namespace: {{ .Values.infisical.connection.namespace }}
+  method: universal
+  universal:
+    {{- with .Values.infisical.credentials }}
+    clientIdRef:
+      name: {{ .name }}
+      namespace: {{ .namespace }}
+      key: clientId
+    clientSecretRef:
+      name: {{ .name }}
+      namespace: {{ .namespace }}
+      key: clientSecret
+    {{- end }}

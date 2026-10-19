@@ -12,12 +12,16 @@ tf-check: ## Check Terraform format and validity, then run the Terraform tests
 	$(TOOLBOX) bash infra/check.sh
 
 # The image tag is only a placeholder: the Argo CD Application gives the real one.
-# Schemas of Kubernetes 1.34.3, the version of the cluster node (infra/platform/cluster.tf).
+# Schemas of Kubernetes 1.34.3, the version of the cluster node (infra/platform/cluster.tf), and for the
+# Infisical kinds the community CRD catalog, pinned by commit. Checked against operator 0.11.12 on
+# 2026-10-19: same fields; the catalog still requires infisicalConnectionRef, which the operator made optional.
+CRD_SCHEMAS := https://raw.githubusercontent.com/datreeio/CRDs-catalog/501527ab9c40c827144c8f45945b25a023e344ce/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
 chart-check: ## Lint the chart, run its unit tests, check what it renders against the Kubernetes schemas
 	$(TOOLBOX) bash -o pipefail -c '\
 	  helm lint --strict chart --set image.tag=check && \
 	  helm unittest chart && \
-	  helm template cards-warehouse chart --set image.tag=check | kubeconform -strict -summary -kubernetes-version 1.34.3'
+	  helm template cards-warehouse chart --set image.tag=check | \
+	    kubeconform -strict -summary -kubernetes-version 1.34.3 -schema-location default -schema-location "$(CRD_SCHEMAS)"'
 
 gitops-check: ## Run the unit tests of the release script, gitops/promote.sh
 	$(TOOLBOX) bash gitops/tests/promote_test.sh

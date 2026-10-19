@@ -25,3 +25,11 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # On a new cluster this Application can sync before the Infisical operator has installed the kinds
+    # the chart uses, and the sync fails. Argo CD never tries a failed revision again on its own: retry.
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

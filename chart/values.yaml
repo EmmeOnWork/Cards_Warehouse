@@ -3,6 +3,27 @@ image:
   # The commit whose image runs, set by the Argo CD Application in gitops/apps.
   tag: ""
 
+# The secrets the app needs, by name only: the values live in Infisical. Each one becomes
+# an environment variable of the app, read from the Secret the Infisical operator fills.
+secrets:
+  - SESSION_SECRET # signs the sessions
+
+# Where those values live in Infisical Cloud.
+infisical:
+  # The address of Infisical: the default connection of the operator's chart (gitops/apps).
+  connection:
+    name: default
+    namespace: infisical
+  projectSlug: ""
+  environment: prod
+  secretPath: /app
+  # How often the operator reads Infisical again: a changed value reaches the cluster within it.
+  refreshInterval: 60s
+  # The credential of the cluster's identity, which Terraform puts in the cluster (infra/platform).
+  credentials:
+    name: infisical-credentials
+    namespace: infisical
+
 # Always written into the Deployment: without it, Argo CD could not tell that a hand change drifted from Git.
 replicas: 1
 

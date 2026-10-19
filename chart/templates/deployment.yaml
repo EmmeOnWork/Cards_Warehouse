@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}
+  annotations:
+    # The app reads its secrets only at start: the operator restarts it when one changes in Infisical.
+    secrets.infisical.com/auto-reload: "true"
 spec:
   replicas: {{ .Values.replicas }}
   selector:
@@ -28,6 +31,15 @@ spec:
             capabilities:
               drop: [ALL]
             readOnlyRootFilesystem: true
+          # A key missing from the Secret keeps the pod from starting, and the pod events name it.
+          env:
+            {{- range .Values.secrets }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cards-warehouse.secretName" $ }}
+                  key: {{ . }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8000

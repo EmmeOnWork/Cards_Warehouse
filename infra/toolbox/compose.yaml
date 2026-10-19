@@ -21,6 +21,11 @@ services:
     environment:
       AWS_PAGER: ""
       TF_PLUGIN_CACHE_DIR: /root/.terraform.d/plugin-cache
+    # The credential the cluster presents to Infisical, as TF_VAR_ variables: on the PC, out of the
+    # repository (infra/platform/README.md). Optional: the checks never need it, in the pipeline neither.
+    env_file:
+      - path: ~/.cards-warehouse/platform.env
+        required: false
 
 volumes:
   kube-config:

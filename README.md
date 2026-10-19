@@ -34,7 +34,7 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 
 ## Secret protection
 
-The repository is public, so no secret may ever enter Git. Three checks stand in the way:
+The repository is public, so no secret may ever enter Git. The secrets live in Infisical Cloud and reach the cluster through its operator; Git holds only their names ([how](infra/platform/README.md#secrets)). Three checks stand in the way:
 
 1. **Before every commit**, a [gitleaks](https://github.com/gitleaks/gitleaks) hook scans the staged changes, running the official gitleaks image. Enable it with `make hooks`.
 2. **On push**, GitHub push protection rejects known token formats.

@@ -8,6 +8,7 @@ Terraform creates a single Argo CD application, `root`, that follows [apps/](app
 |---|---|
 | [apps/cards-warehouse-namespace.yaml](apps/cards-warehouse-namespace.yaml) | The app's namespace, which enforces the restricted Pod Security Standard |
 | [apps/cards-warehouse.yaml](apps/cards-warehouse.yaml) | The app: the [chart](../chart/) from `main`, with `image.tag`, the commit whose image runs |
+| [apps/infisical-operator.yaml](apps/infisical-operator.yaml) | The Infisical operator, which copies secrets from Infisical Cloud into the cluster: its official chart, pinned, in the `infisical` namespace that Terraform creates with the operator's credential |
 | [promote.sh](promote.sh) | The release: sets `image.tag` to a commit, in one commit by the GitHub bot. Run by the pipeline |
 | [tests/promote_test.sh](tests/promote_test.sh) | Its unit tests, in throwaway Git repositories: `make gitops-check` |
 
@@ -15,6 +16,7 @@ Terraform creates a single Argo CD application, `root`, that follows [apps/](app
 - **Polling.** GitHub cannot reach a cluster on the PC, so Argo CD polls the repository: every 120 seconds plus up to 60 seconds of jitter, the chart defaults. A pushed commit reaches the cluster within about three minutes.
 - **Automated sync with self-heal and prune.** A change made by hand in the cluster is undone, a resource deleted by hand is created again, and a manifest removed from Git is deleted from the cluster. Both `root` and the app's Application sync this way.
 - **Cascade delete.** The app's Application carries the Argo CD resources finalizer: if it leaves Git, what it installed is deleted with it, instead of being left running without an owner.
+- **Retry.** On a new cluster, the app's Application can sync before the operator has installed the kinds its chart uses (`InfisicalAuth`, `InfisicalStaticSecret`), and that sync fails. Argo CD never tries a failed revision again on its own, so the app's Application retries, up to 10 times, waiting from 10 seconds up to 3 minutes.
 
 ## Release and rollback
 

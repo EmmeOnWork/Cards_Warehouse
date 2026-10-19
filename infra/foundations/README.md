@@ -55,7 +55,28 @@ bash tests/acceptance.sh
 
 ## The app credential
 
-Terraform creates the `cards-warehouse-app` user and its permissions, never its access key: everything Terraform creates is written into the state, so the key would get a second copy outside Infisical. The key is created by hand in the IAM console and pasted straight into Infisical.
+Terraform creates the `cards-warehouse-app` user and its permissions, never its access key: everything Terraform creates is written into the state, so the key would get a second copy outside Infisical. The key is created by hand in the IAM console and pasted straight into Infisical, in the `prod` environment, folder `/aws` (see [the platform's secrets](../platform/README.md#secrets)).
+
+### Creating the key
+
+1. In the IAM console, open the user `cards-warehouse-app`, *Security credentials*, *Create access key*, use case *Application running outside AWS*.
+2. Copy the access key id into `AWS_ACCESS_KEY_ID` and the secret access key into `AWS_SECRET_ACCESS_KEY`, in Infisical. Do not download the `.csv` file: the console shows the secret only once, and Infisical is the only place it goes.
+3. Check that the user has exactly one key, the one in Infisical. Inside `make shell`, after `aws login --remote`:
+
+   ```sh
+   aws iam list-access-keys --user-name cards-warehouse-app --query 'AccessKeyMetadata[].[AccessKeyId,Status]' --output text
+   ```
+
+### Replacing the key
+
+For a leaked key, or once a year. A user can hold two keys, so the new one works before the old one stops:
+
+1. Create a second key as above and replace both values in Infisical. The free plan keeps no history of values, so the old secret is gone from Infisical from now on.
+2. Wait about a minute: the operator copies the new values into the cluster and restarts what reads them. Check that what uses the key (photos and backups, once they exist) still works.
+3. Deactivate the old key in IAM, check again, then delete it. If something breaks while the old key is only deactivated, reactivate it and look for what still reads the old values.
+4. Check that the user has exactly one key again (step 3 above).
+
+The acceptance test of the foundations creates a temporary key of its own: run it only while the user has a single key.
 
 ## Costs and the AWS free plan
 

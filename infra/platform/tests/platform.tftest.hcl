@@ -2,6 +2,7 @@
 # so they need no Docker, no cluster and no AWS, and run in a few seconds.
 mock_provider "kind" {}
 mock_provider "helm" {}
+mock_provider "kubernetes" {}
 
 run "argocd_ui_is_published_only_on_the_pc_loopback" {
   command = plan
@@ -67,5 +68,43 @@ run "root_application_follows_main_and_undoes_manual_changes" {
       selfHeal = true
     }
     error_message = "The root application must sync on its own, undo manual changes and delete what leaves Git."
+  }
+}
+
+# Fake values: the real credential lives only on the PC, out of the repository.
+variables {
+  infisical_client_id     = "a-client-id"
+  infisical_client_secret = "a-client-secret"
+}
+
+run "the_infisical_credential_is_where_the_app_chart_looks_for_it" {
+  command = plan
+
+  assert {
+    condition = yamldecode(file("../../chart/values.yaml")).infisical.credentials == {
+      name      = kubernetes_secret_v1.infisical_credentials.metadata[0].name
+      namespace = kubernetes_secret_v1.infisical_credentials.metadata[0].namespace
+    }
+    error_message = "The Secret holding the Infisical credential must have the name and namespace the app's chart reads it from."
+  }
+}
+
+run "the_infisical_operator_runs_where_terraform_and_the_app_chart_expect_it" {
+  command = plan
+
+  assert {
+    condition     = yamldecode(file("../../gitops/apps/infisical-operator.yaml")).spec.destination.namespace == kubernetes_namespace_v1.infisical.metadata[0].name
+    error_message = "Argo CD must install the Infisical operator in the namespace Terraform creates for it."
+  }
+
+  assert {
+    condition = (
+      yamldecode(file("../../gitops/apps/infisical-operator.yaml")).spec.source.helm.valuesObject.defaultInfisicalConnection.enabled &&
+      yamldecode(file("../../chart/values.yaml")).infisical.connection == {
+        name      = "default"
+        namespace = kubernetes_namespace_v1.infisical.metadata[0].name
+      }
+    )
+    error_message = "The app's chart must use the default connection the operator's chart creates in the operator's namespace."
   }
 }
