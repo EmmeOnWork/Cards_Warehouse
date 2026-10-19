@@ -42,6 +42,15 @@ The unit tests in [tests/platform.tftest.hcl](tests/platform.tftest.hcl) check t
 
 The acceptance test starts from no cluster and runs the real thing: while `terraform apply` runs, a second run is refused by the S3 lock; then the node is Ready, the UI answers on the PC, the root application is Synced and Healthy at the last commit on GitHub, the namespace declared in Git exists. Then the app: it answers healthy on `localhost:8000`, reports as its version the tag written in Git, and runs the GHCR image with no pull credentials. A replica count changed by hand and a Service deleted by hand are both put back by Argo CD, and the test prints how many seconds it took. No new file is offered to Git. It then destroys the platform and checks that no node is left and the foundations are intact.
 
+A release needs a push, so its acceptance test runs by hand, with the platform up, right after pushing:
+
+```sh
+bash infra/platform/tests/release.sh            # after a push that changes app/
+bash infra/platform/tests/release.sh rollback   # after reverting the bot's release commit and pushing
+```
+
+It waits until the app reports the version Git asks for. Then it checks, on GitHub, that the release commit is by `github-actions[bot]`, changes only `image.tag`, and starts no pipeline, or, after a rollback, that the revert released nothing. It ends with one row of [measurements](../../docs/measurements/commit-to-production.md): the seconds from the push to each step, from the clocks of GitHub, Argo CD and Kubernetes.
+
 One behaviour needs a commit, so it is checked by hand: add a manifest to `gitops/apps` (a namespace, for example), push it, and it appears in the cluster within about three minutes; remove it, push, and it is deleted.
 
 ## Choices checked on 2026-10-15

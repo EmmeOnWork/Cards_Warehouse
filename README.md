@@ -28,6 +28,7 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 | `make shell` | Opens a shell with Terraform, the AWS CLI, kubectl and Helm |
 | `make tf-check` | Checks format and validity of the Terraform code and runs its tests |
 | `make chart-check` | Lints the Helm chart, runs its unit tests and validates what it renders against the Kubernetes schemas |
+| `make gitops-check` | Runs the unit tests of the release script |
 | `make platform-up` | Creates the kind cluster with Argo CD, which then applies [gitops/](gitops/): the app answers at <http://localhost:8000> |
 | `make platform-down` | Destroys the cluster, leaving the AWS foundations untouched |
 
@@ -45,14 +46,15 @@ The repository is public, so no secret may ever enter Git. Three checks stand in
 
 ```
 secrets ──┐
-checks ───┼─► image ─► published
+checks ───┼─► image ─► published ─► release
 platform ─┘
 ```
 
 - **secrets**: gitleaks over every commit.
 - **checks**: `make lint` and `make test`.
-- **platform**: `make tf-check` and `make chart-check`. An image is never published for a commit whose Terraform or chart is broken.
+- **platform**: `make tf-check`, `make chart-check` and `make gitops-check`. An image is never published for a commit whose Terraform or chart is broken.
 - **image**: builds the image with the commit as its version, then `make scan` with [Trivy](app/trivy.yaml). On `main` only, it pushes `ghcr.io/emmeonwork/cards-warehouse:<commit>`, logged in with the token GitHub gives to the run.
 - **published**: on `main` only, `make verify-published` pulls the image without credentials and checks its version.
+- **release**: on `main` only, and only when the push changed `app/`, a commit by `github-actions[bot]` sets `image.tag` in [gitops/](gitops/) to the pushed commit. Argo CD polls GitHub and runs it. Reverting that commit goes back to the previous version: see [gitops/](gitops/README.md#release-and-rollback).
 
 Pull requests run the checks and the scan but publish nothing. Every step is a `make` target or a pinned image, the same as on the PC. The only action, `actions/checkout`, is pinned by commit.

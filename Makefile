@@ -3,7 +3,7 @@ TOOLBOX := docker compose -f infra/toolbox/compose.yaml run --rm --build toolbox
 APP_RUN := docker compose -f app/compose.yaml run --rm --build
 APP_DEV := $(APP_RUN) dev
 
-.PHONY: shell tf-check chart-check platform-up platform-down app-shell lint test scan verify-published hooks
+.PHONY: shell tf-check chart-check gitops-check platform-up platform-down app-shell lint test scan verify-published hooks
 
 shell: ## Open a shell with terraform, the AWS CLI, kubectl and Helm
 	$(TOOLBOX) bash
@@ -18,6 +18,9 @@ chart-check: ## Lint the chart, run its unit tests, check what it renders agains
 	  helm lint --strict chart --set image.tag=check && \
 	  helm unittest chart && \
 	  helm template cards-warehouse chart --set image.tag=check | kubeconform -strict -summary -kubernetes-version 1.34.3'
+
+gitops-check: ## Run the unit tests of the release script, gitops/promote.sh
+	$(TOOLBOX) bash gitops/tests/promote_test.sh
 
 platform-up: ## Create the kind cluster, Argo CD and its root application (after aws login)
 	$(TOOLBOX) sh -c "terraform -chdir=infra/platform init -input=false && terraform -chdir=infra/platform apply -auto-approve -input=false"
