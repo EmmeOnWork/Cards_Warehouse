@@ -17,10 +17,10 @@ spec:
     helm:
       valuesObject:
         # The InfisicalConnection named "default" in this namespace: the address of Infisical Cloud,
-        # EU region, for every InfisicalAuth that names it (chart/values.yaml).
+        # US region, for every InfisicalAuth that names it (chart/values.yaml).
         defaultInfisicalConnection:
           enabled: true
-          address: https://eu.infisical.com
+          address: https://app.infisical.com
   destination:
     server: https://kubernetes.default.svc
     # Created by Terraform, with the credential the operator signs in with (infra/platform/infisical.tf).

@@ -26,7 +26,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 
 ## Secrets
 
-The secrets live in [Infisical Cloud](https://infisical.com), EU region. Git holds only their names, in the app's [chart](../../chart/values.yaml). The path of a secret:
+The secrets live in [Infisical Cloud](https://infisical.com), US region: the organization that holds the project lives there, and Infisical offers no way to create a second one in the EU account (checked on 2026-10-21). The secrets are encrypted by Infisical and none of them is personal data. Git holds only their names, in the app's [chart](../../chart/values.yaml). The path of a secret:
 
 ```
 Infisical (project cards-warehouse, environment prod, folder /app)
@@ -41,7 +41,7 @@ Infisical (project cards-warehouse, environment prod, folder /app)
 
 ### Once: set up Infisical
 
-1. Sign up at <https://eu.infisical.com>. The region is chosen with the account and cannot be changed later.
+1. Sign up at <https://app.infisical.com>. The region is chosen with the account and cannot be changed later: the US and EU regions are separate installations, each with its own accounts.
 2. Create the project `cards-warehouse` and write its slug, from the project settings, into `infisical.projectSlug` in [chart/values.yaml](../../chart/values.yaml). The slug is a name, not a secret.
 3. In the `prod` environment, create the folders `/app` and `/aws`. In `/app`, create `SESSION_SECRET` with a random value, for example the output of `head -c 32 /dev/urandom | base64`, run in `make shell`.
 4. In the organization's machine identities, create `kind-cluster` with Universal Auth, add it to the project with the *Viewer* role (read-only), and create a client secret.
