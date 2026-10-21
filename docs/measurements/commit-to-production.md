@@ -1,6 +1,6 @@
 # From commit to production
 
-How long a push on `main` that changes the app takes to run in the cluster, and how long a rollback takes.
+How long a push on `main` takes to run in the cluster. A rollback is the release of a `git revert`, so it is measured the same way.
 
 ## Method
 
@@ -8,23 +8,18 @@ How long a push on `main` that changes the app takes to run in the cluster, and 
 - **End: the new pod is Ready.** The `Ready` condition of the first pod running the image of the commit, from Kubernetes. From then on the Service sends it traffic, and `/version` answers with the commit.
 - **Steps in between**, from the same clocks:
   - *Image published*: the end of the `build, scan and publish` job, from GitHub Actions.
-  - *Release commit*: the push of the bot's commit that sets `image.tag`, from the repository activity.
-  - *Argo CD sync*: `deployedAt` of the app's Application, in the history entry with that `image.tag`.
+  - *Production moved*: the end of the `release to the cluster` job, which points the `production` branch at the commit.
+  - *Argo CD sync*: `deployedAt` of the app's Application, in the history entry for the commit.
 - **The tool**: [`infra/platform/tests/release.sh`](../../infra/platform/tests/release.sh), run right after the push. It also checks the release from end to end and prints the row below. Times are minutes:seconds after the push.
 
-**Argo CD polling has a floor.** GitHub cannot reach a cluster on the PC, so Argo CD polls the repository every `timeout.reconciliation` plus a random jitter up to `timeout.reconciliation.jitter`. The test reads both from `argocd-cm` in the cluster. With the chart defaults, 120 s + 60 s, a release commit waits from 0 to 3 minutes before Argo CD sees it.
+**Argo CD polling has a floor.** GitHub cannot reach a cluster on the PC, so Argo CD polls the repository every `timeout.reconciliation` plus a random jitter up to `timeout.reconciliation.jitter`. The test reads both from `argocd-cm` in the cluster. With the chart defaults, 120 s + 60 s, a moved `production` waits from 0 to 3 minutes before Argo CD sees it.
 
 ## Releases
 
-| Date | Commit | Push (UTC) | Image published | Release commit | Argo CD sync | Pod Ready | Argo CD polling |
+Rollbacks are marked as such in the Commit column.
+
+| Date | Commit | Push (UTC) | Image published | Production moved | Argo CD sync | Pod Ready | Argo CD polling |
 |---|---|---|---|---|---|---|---|
-
-## Rollbacks
-
-Revert of the release commit, pushed: no build, only Argo CD polling and the rollout.
-
-| Date | Revert | Push (UTC) | Argo CD sync | Pod Ready | Argo CD polling |
-|---|---|---|---|---|---|
 
 ## Environment
 

@@ -73,18 +73,17 @@ make tf-check                            # format, validity and unit tests: no c
 bash infra/platform/tests/acceptance.sh  # inside make shell: a whole cycle, about 6 minutes
 ```
 
-The unit tests in [tests/platform.tftest.hcl](tests/platform.tftest.hcl) check the plan against mock providers: every port published only on the loopback, the path from port 8090 to the Argo CD server and from port 8000 to the app's node port, the root application following `main` with self-heal and prune. Two of them check that separate places agree: the Infisical credential is in the Secret the app's chart reads, and Argo CD installs the operator in the namespace Terraform creates, whose default connection the chart uses.
+The unit tests in [tests/platform.tftest.hcl](tests/platform.tftest.hcl) check the plan against mock providers: every port published only on the loopback, the path from port 8090 to the Argo CD server and from port 8000 to the app's node port, the root application following `production` with self-heal and prune. Two of them check that separate places agree: the Infisical credential is in the Secret the app's chart reads, and Argo CD installs the operator in the namespace Terraform creates, whose default connection the chart uses.
 
-The acceptance test needs the Infisical credential in `platform.env` and the set-up above. It starts from no cluster and runs the real thing: while `terraform apply` runs, a second run is refused by the S3 lock; then the Infisical credential is in the cluster but, searched by its value, neither in the state, nor in the Git history, nor in any file of the repository; the node is Ready, the UI answers on the PC, the root application is Synced and Healthy at the last commit on GitHub, the namespace declared in Git exists, and the Infisical operator is installed by Argo CD. Then the app: it answers healthy on `localhost:8000`, reports as its version the tag written in Git, runs the GHCR image with no pull credentials, and reads the session key created in Infisical: the fingerprint it reports matches the value the operator synced. A replica count changed by hand and a Service deleted by hand are both put back by Argo CD, and the test prints how many seconds it took. No new file is offered to Git. It then destroys the platform and checks that no node is left and the foundations are intact.
+The acceptance test needs the Infisical credential in `platform.env` and the set-up above. It starts from no cluster and runs the real thing: while `terraform apply` runs, a second run is refused by the S3 lock; then the Infisical credential is in the cluster but, searched by its value, neither in the state, nor in the Git history, nor in any file of the repository; the node is Ready, the UI answers on the PC, the root application is Synced and Healthy at the commit `production` points at on GitHub, the namespace declared in Git exists, and the Infisical operator is installed by Argo CD. Then the app: it answers healthy on `localhost:8000`, reports as its version that same commit, runs the GHCR image with no pull credentials, and reads the session key created in Infisical: the fingerprint it reports matches the value the operator synced. A replica count changed by hand and a Service deleted by hand are both put back by Argo CD, and the test prints how many seconds it took. No new file is offered to Git. It then destroys the platform and checks that no node is left and the foundations are intact.
 
 A release needs a push, so its acceptance test runs by hand, with the platform up, right after pushing:
 
 ```sh
-bash infra/platform/tests/release.sh            # after a push that changes app/
-bash infra/platform/tests/release.sh rollback   # after reverting the bot's release commit and pushing
+bash infra/platform/tests/release.sh   # after a push on main, a revert included
 ```
 
-It waits until the app reports the version Git asks for. Then it checks, on GitHub, that the release commit is by `github-actions[bot]`, changes only `image.tag`, and starts no pipeline, or, after a rollback, that the revert released nothing. It ends with one row of [measurements](../../docs/measurements/commit-to-production.md): the seconds from the push to each step, from the clocks of GitHub, Argo CD and Kubernetes.
+It waits until the app reports the pushed commit as its version. Then it checks, on GitHub, that the pipeline of the push succeeded and that `production` points at the commit. It ends with one row of [measurements](../../docs/measurements/commit-to-production.md): the time from the push to each step, from the clocks of GitHub, Argo CD and Kubernetes.
 
 Changing a secret needs a person in Infisical, so it is a drill, run by hand with the platform up:
 
@@ -94,7 +93,7 @@ bash infra/platform/tests/rotation.sh   # inside make shell
 
 It asks you to give `SESSION_SECRET` a new value in Infisical, then prints the seconds until the new value is in the cluster and until the restarted app runs with it. Only fingerprints are printed, never values.
 
-One behaviour needs a commit, so it is checked by hand: add a manifest to `gitops/apps` (a namespace, for example), push it, and it appears in the cluster within about three minutes; remove it, push, and it is deleted.
+One behaviour needs a commit, so it is checked by hand: add a manifest to `gitops/apps` (a namespace, for example), push it, and it appears in the cluster within about three minutes of the end of the pipeline; remove it, push, and it is deleted.
 
 ## Choices checked on 2026-10-15
 

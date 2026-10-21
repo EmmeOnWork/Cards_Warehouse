@@ -1,6 +1,6 @@
-# Every push on main publishes a checked, tested and scanned image to GHCR, tagged with its commit.
-# When the push changed the app, a bot commit then points gitops/ at that image, and Argo CD
-# runs it in the cluster. Pull requests run the same checks and the scan, but publish nothing.
+# Every push on main publishes a checked, tested and scanned image to GHCR, tagged with its commit,
+# then moves the production branch to that commit: Argo CD follows production, never main.
+# The pipeline never writes to main. Pull requests run the same checks and the scan, but publish nothing.
 # Each step runs a make target or a pinned image, as on the PC: no logic lives only here.
 name: pipeline
 
@@ -11,6 +11,11 @@ on:
 
 # No permission by default: each job asks for what it needs.
 permissions: {}
+
+# A newer push cancels the run of an older one: production never waits for a commit already replaced.
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   IMAGE: ghcr.io/emmeonwork/cards-warehouse:${{ github.sha }}
@@ -54,10 +59,8 @@ jobs:
           persist-credentials: false
       # Format, validity and unit tests against mock providers: no AWS credential needed.
       - run: make tf-check
-      # Lint, unit tests, and the rendered manifests against the Kubernetes schemas.
+      # Lint, and the rendered manifests against the Kubernetes schemas.
       - run: make chart-check
-      # The release script, before it ever writes to main.
-      - run: make gitops-check
 
   image:
     name: build, scan and publish
@@ -84,51 +87,22 @@ jobs:
           echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           docker push "$IMAGE"
 
-  published:
-    name: published image is public and reports its commit
+  release:
+    name: release to the cluster
+    # Only a commit whose checks passed and whose image was scanned and published gets here.
     needs: image
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    # No package permission and no login: the pull must work for anyone.
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - run: make verify-published SHA="$GITHUB_SHA"
-
-  release:
-    name: release to the cluster through gitops
-    # Only an image that passed the scan, was published and answers anonymously with its
-    # commit gets here: a blocked image never reaches the configuration Argo CD reads.
-    needs: published
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    # One release at a time: a second one waits, then sees the first one's commit.
-    concurrency:
-      group: release
-      cancel-in-progress: false
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The latest main, not the pushed commit: the release commit goes on top of it.
-          ref: main
-          # The whole history: promote.sh compares the pushed commit with older ones.
+          # The whole history: git needs the commit production is on to tell forward from backward.
           fetch-depth: 0
           # Unlike the other jobs, this one keeps the run's token, for the push below.
           persist-credentials: true
-      # Plain bash, git and sed on the runner: building the toolbox would delay every release.
-      - name: Point gitops at the image of this commit, if the push changed the app
-        env:
-          BEFORE: ${{ github.event.before }}
-        run: bash gitops/promote.sh "$GITHUB_SHA" "$BEFORE"
-      # Pushed with the run's token, which GitHub never lets start a workflow: no loop.
-      # If main moved meanwhile, the push is refused and nothing is overwritten.
-      - name: Push the release commit, if there is one
-        run: |
-          if [[ -n $(git log --oneline origin/main..HEAD) ]]; then
-            git push origin HEAD:main
-          fi
+      # Moves a branch and adds no commit, so main holds only commits made by hand. Without --force,
+      # git refuses to move production back onto an older commit. Argo CD then runs this commit.
+      - name: Point production at this commit
+        run: git push origin "$GITHUB_SHA:refs/heads/production"

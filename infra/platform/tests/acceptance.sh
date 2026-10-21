@@ -143,16 +143,13 @@ app_answers_healthy_on_the_pc() {
     http://host.docker.internal:8000/readyz >/dev/null
 }
 
-# The tag in gitops/apps at the last commit of main, read from GitHub itself rather than from
-# Argo CD. A commit in the URL, not the branch: the raw files of a branch are cached for minutes.
+# The commit production points at, read from GitHub itself rather than from Argo CD.
 app_reports_the_version_in_git() {
-  local head tag version
-  head=$(git ls-remote https://github.com/EmmeOnWork/Cards_Warehouse.git refs/heads/main | cut -f1)
-  tag=$(curl --silent --fail "https://raw.githubusercontent.com/EmmeOnWork/Cards_Warehouse/$head/gitops/apps/cards-warehouse.yaml" |
-    sed -n 's/^ *tag: *//p')
+  local head version
+  head=$(git ls-remote https://github.com/EmmeOnWork/Cards_Warehouse.git refs/heads/production | cut -f1)
   version=$(curl --silent --fail --max-time 5 http://host.docker.internal:8000/version)
-  [[ -n $tag && $version == "{\"version\":\"$tag\"}" ]] || {
-    echo "      in Git: ${tag:-no tag}; the app reports: ${version:-nothing}"
+  [[ -n $head && $version == "{\"version\":\"$head\"}" ]] || {
+    echo "      production on GitHub: ${head:-missing}; the app reports: ${version:-nothing}"
     return 1
   }
 }
@@ -239,7 +236,7 @@ check "the root application is Synced and Healthy at the last commit on GitHub" 
 check "the namespace declared in Git exists, applied by Argo CD" namespace_from_git_exists
 check "the Infisical operator is installed by Argo CD" infisical_operator_installed_by_argocd
 check "the app answers healthy on the PC at localhost:8000" app_answers_healthy_on_the_pc
-check "the app reports the version written in Git" app_reports_the_version_in_git
+check "the app reports the commit production points at" app_reports_the_version_in_git
 check "the cluster pulled the image from GHCR without credentials" image_pulled_from_ghcr_without_credentials
 check "a secret created in Infisical reaches the cluster and the app reads it" app_reads_its_secret_from_infisical
 check "a replica count changed by hand is undone by Argo CD" hand_scaling_is_undone

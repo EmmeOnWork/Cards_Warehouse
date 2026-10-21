@@ -7,7 +7,7 @@ Helm chart that packages the application for Kubernetes: a Deployment, a NodePor
 
 The Deployment gives the app each secret listed in `secrets` as an environment variable from that Secret. When a value changes, the operator restarts the Deployment (annotation `secrets.infisical.com/auto-reload`), since the app reads its secrets only at start.
 
-Argo CD renders it from this folder on `main`, through the `cards-warehouse` Application in [gitops/apps](../gitops/apps/cards-warehouse.yaml). That Application gives the one value the chart has no default for: `image.tag`, the commit whose image runs. Without it, rendering fails instead of running an unknown version.
+Argo CD renders it from this folder at the commit the `production` branch points at, through the `cards-warehouse` Application in [gitops/apps](../gitops/apps/cards-warehouse.yaml). That Application gives the one value the chart has no default for: `image.tag`, set to that same commit. Without it, rendering fails instead of running an unknown version.
 
 ## Values
 
@@ -36,7 +36,6 @@ make chart-check
 It runs, in the toolbox:
 
 1. `helm lint --strict`: the chart is well formed.
-2. `helm unittest`: the tests in [tests/](tests/), written with [helm-unittest](https://github.com/helm-unittest/helm-unittest). They render the templates and check the result, in milliseconds and with no cluster.
-3. `helm template | kubeconform -strict`: what the chart renders is valid against the schemas of Kubernetes 1.34.3, the version of the cluster, with no unknown field. The Infisical kinds are checked against the schemas of the community [CRD catalog](https://github.com/datreeio/CRDs-catalog), pinned by commit.
+2. `helm template | kubeconform -strict`: what the chart renders is valid against the schemas of Kubernetes 1.34.3, the version of the cluster, with no unknown field. The Infisical kinds are checked against the schemas of the community [CRD catalog](https://github.com/datreeio/CRDs-catalog), pinned by commit.
 
 Helm is 4.2.1, the version Argo CD 3.5.4 renders charts with, so the checks see the same manifests as the cluster.

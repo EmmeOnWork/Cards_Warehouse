@@ -1,4 +1,4 @@
-# The app: Argo CD renders the Helm chart in chart/ from main, with the image of the commit below.
+# The app: Argo CD renders the Helm chart in chart/ at the commit production points at, with the image of that commit.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -11,13 +11,14 @@ spec:
   project: default
   source:
     repoURL: https://github.com/EmmeOnWork/Cards_Warehouse.git
-    targetRevision: main
+    # The last commit the pipeline checked and published an image for: chart and image come from it.
+    targetRevision: production
     path: chart
     helm:
-      valuesObject:
-        image:
-          # The commit whose image runs in the cluster: the one version of the app in Git.
-          tag: f49325cabe03f0965cb89abd6f08f87b886946a7
+      parameters:
+        # The commit Argo CD reads, substituted by Argo CD itself: the image the pipeline built from it.
+        - name: image.tag
+          value: $ARGOCD_APP_REVISION
   destination:
     server: https://kubernetes.default.svc
     namespace: cards-warehouse

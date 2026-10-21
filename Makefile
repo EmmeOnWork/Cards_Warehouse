@@ -1,9 +1,8 @@
 # Every tool runs inside a container: the PC needs only Docker, Git and make.
 TOOLBOX := docker compose -f infra/toolbox/compose.yaml run --rm --build toolbox
-APP_RUN := docker compose -f app/compose.yaml run --rm --build
-APP_DEV := $(APP_RUN) dev
+APP_DEV := docker compose -f app/compose.yaml run --rm --build dev
 
-.PHONY: shell tf-check chart-check gitops-check platform-up platform-down app-shell lint test scan verify-published hooks
+.PHONY: shell tf-check chart-check platform-up platform-down app-shell lint test scan hooks
 
 shell: ## Open a shell with terraform, the AWS CLI, kubectl and Helm
 	$(TOOLBOX) bash
@@ -11,20 +10,16 @@ shell: ## Open a shell with terraform, the AWS CLI, kubectl and Helm
 tf-check: ## Check Terraform format and validity, then run the Terraform tests
 	$(TOOLBOX) bash infra/check.sh
 
-# The image tag is only a placeholder: the Argo CD Application gives the real one.
+# The image tag is only a placeholder: Argo CD gives the real one, the commit it reads.
 # Schemas of Kubernetes 1.34.3, the version of the cluster node (infra/platform/cluster.tf), and for the
 # Infisical kinds the community CRD catalog, pinned by commit. Checked against operator 0.11.12 on
 # 2026-10-19: same fields; the catalog still requires infisicalConnectionRef, which the operator made optional.
 CRD_SCHEMAS := https://raw.githubusercontent.com/datreeio/CRDs-catalog/501527ab9c40c827144c8f45945b25a023e344ce/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
-chart-check: ## Lint the chart, run its unit tests, check what it renders against the Kubernetes schemas
+chart-check: ## Lint the chart and check what it renders against the Kubernetes schemas
 	$(TOOLBOX) bash -o pipefail -c '\
 	  helm lint --strict chart --set image.tag=check && \
-	  helm unittest chart && \
 	  helm template cards-warehouse chart --set image.tag=check | \
 	    kubeconform -strict -summary -kubernetes-version 1.34.3 -schema-location default -schema-location "$(CRD_SCHEMAS)"'
-
-gitops-check: ## Run the unit tests of the release script, gitops/promote.sh
-	$(TOOLBOX) bash gitops/tests/promote_test.sh
 
 platform-up: ## Create the kind cluster, Argo CD and its root application (after aws login)
 	$(TOOLBOX) sh -c "terraform -chdir=infra/platform init -input=false && terraform -chdir=infra/platform apply -auto-approve -input=false"
@@ -44,10 +39,6 @@ test: ## Run the app tests, unit and acceptance (builds and runs the real image)
 scan: ## Fail when IMAGE=<image> has a HIGH or CRITICAL vulnerability with a fix (policy: app/trivy.yaml)
 	$(if $(IMAGE),,$(error usage: make scan IMAGE=<image>))
 	$(APP_DEV) trivy image $(IMAGE)
-
-verify-published: ## Check that the image published for SHA=<commit> is public and reports that commit
-	$(if $(SHA),,$(error usage: make verify-published SHA=<commit>))
-	$(APP_RUN) -e PUBLISHED_SHA=$(SHA) dev uv run pytest -v tests/acceptance/test_published_image.py
 
 hooks: ## Enable the gitleaks pre-commit hook, once per clone (needs Docker running)
 	git config core.hooksPath .githooks

@@ -50,16 +50,16 @@ run "the_pc_port_8000_leads_to_the_app" {
   }
 }
 
-run "root_application_follows_main_and_undoes_manual_changes" {
+run "root_application_follows_production_and_undoes_manual_changes" {
   command = plan
 
   assert {
     condition = yamldecode(helm_release.root_app.values[0]).applications.root.source == {
       repoURL        = "https://github.com/EmmeOnWork/Cards_Warehouse.git"
-      targetRevision = "main"
+      targetRevision = "production"
       path           = "gitops/apps"
     }
-    error_message = "The root application must read gitops/apps from the main branch of the public repository."
+    error_message = "The root application must read gitops/apps from the production branch of the public repository."
   }
 
   assert {

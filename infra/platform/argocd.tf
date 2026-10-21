@@ -48,10 +48,11 @@ resource "helm_release" "root_app" {
       root = {
         namespace = "argocd"
         project   = "default"
-        # Argo CD polls GitHub: GitHub cannot reach a cluster on the PC.
+        # Argo CD polls GitHub: GitHub cannot reach a cluster on the PC. It follows production, which
+        # the pipeline moves only to a commit that passed every check: a red main never reaches the cluster.
         source = {
           repoURL        = "https://github.com/EmmeOnWork/Cards_Warehouse.git"
-          targetRevision = "main"
+          targetRevision = "production"
           path           = "gitops/apps"
         }
         destination = {

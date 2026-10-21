@@ -23,12 +23,10 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 | `make lint` | Checks the style of the Python code (ruff) and of the pipeline (actionlint) |
 | `make test` | Runs the app tests, including the ones that build and run the real image |
 | `make scan IMAGE=<image>` | Fails when the image has a HIGH or CRITICAL vulnerability with a fix |
-| `make verify-published SHA=<commit>` | Checks that the image published for a commit is public and reports that commit |
 | `make app-shell` | Opens a shell with Python, uv, the Docker CLI, trivy and actionlint, in `app/` |
 | `make shell` | Opens a shell with Terraform, the AWS CLI, kubectl and Helm |
 | `make tf-check` | Checks format and validity of the Terraform code and runs its tests |
-| `make chart-check` | Lints the Helm chart, runs its unit tests and validates what it renders against the Kubernetes schemas |
-| `make gitops-check` | Runs the unit tests of the release script |
+| `make chart-check` | Lints the Helm chart and validates what it renders against the Kubernetes schemas |
 | `make platform-up` | Creates the kind cluster with Argo CD, which then applies [gitops/](gitops/): the app answers at <http://localhost:8000> |
 | `make platform-down` | Destroys the cluster, leaving the AWS foundations untouched |
 
@@ -46,15 +44,14 @@ The repository is public, so no secret may ever enter Git. The secrets live in I
 
 ```
 secrets ──┐
-checks ───┼─► image ─► published ─► release
+checks ───┼─► image ─► release
 platform ─┘
 ```
 
 - **secrets**: gitleaks over every commit.
 - **checks**: `make lint` and `make test`.
-- **platform**: `make tf-check`, `make chart-check` and `make gitops-check`. An image is never published for a commit whose Terraform or chart is broken.
+- **platform**: `make tf-check` and `make chart-check`. An image is never published for a commit whose Terraform or chart is broken.
 - **image**: builds the image with the commit as its version, then `make scan` with [Trivy](app/trivy.yaml). On `main` only, it pushes `ghcr.io/emmeonwork/cards-warehouse:<commit>`, logged in with the token GitHub gives to the run.
-- **published**: on `main` only, `make verify-published` pulls the image without credentials and checks its version.
-- **release**: on `main` only, and only when the push changed `app/`, a commit by `github-actions[bot]` sets `image.tag` in [gitops/](gitops/) to the pushed commit. Argo CD polls GitHub and runs it. Reverting that commit goes back to the previous version: see [gitops/](gitops/README.md#release-and-rollback).
+- **release**: on `main` only, moves the `production` branch to the pushed commit. It adds no commit to `main`. Argo CD follows `production`, so the cluster only ever runs a commit that passed everything above: see [gitops/](gitops/README.md#release-and-rollback).
 
-Pull requests run the checks and the scan but publish nothing. Every step is a `make` target or a pinned image, the same as on the PC. The only action, `actions/checkout`, is pinned by commit.
+A newer push cancels the run of an older one. Pull requests run the checks and the scan but publish nothing. Every step is a `make` target or a pinned image, the same as on the PC. The only action, `actions/checkout`, is pinned by commit.
