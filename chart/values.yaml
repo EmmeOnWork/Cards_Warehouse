@@ -14,7 +14,8 @@ infisical:
   connection:
     name: default
     namespace: infisical
-  projectSlug: ""
+  # A name, not a secret: from the project settings in Infisical.
+  projectSlug: cards-warehouse-g-ke-7
   environment: prod
   secretPath: /app
   # How often the operator reads Infisical again: a changed value reaches the cluster within it.
