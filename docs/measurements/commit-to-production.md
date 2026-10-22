@@ -20,6 +20,7 @@ Rollbacks are marked as such in the Commit column.
 
 | Date | Commit | Push (UTC) | Image published | Production moved | Argo CD sync | Pod Ready | Argo CD polling |
 |---|---|---|---|---|---|---|---|
+| 2026-10-22 | `03bc02b`, first with PostgreSQL: the database created during the release | 16:47:34 | 1:57 | 2:07 | 4:36 | **5:40** | 120s + 60s |
 
 ## Environment
 
