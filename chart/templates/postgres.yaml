@@ -1,0 +1,89 @@
+# PostgreSQL, one replica, without an operator. A StatefulSet, not a Deployment: its pod keeps the same
+# name and the same volume when it is started again, and the volume outlives even the StatefulSet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cards-warehouse.postgresName" . }}
+spec:
+  # Headless: the name resolves straight to the pod, with no virtual address in between.
+  clusterIP: None
+  selector:
+    {{- include "cards-warehouse.postgresSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cards-warehouse.postgresName" . }}
+spec:
+  serviceName: {{ include "cards-warehouse.postgresName" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cards-warehouse.postgresSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cards-warehouse.postgresSelectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      # The image's postgres user, by number, so Kubernetes can check that it is not root. The server
+      # refuses a data directory that belongs to another user: it creates its own inside the volume.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          securityContext:
+            {{- include "cards-warehouse.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.database.name }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.user }}
+            # The same key the app connects with. Read only at the first start, on an empty volume:
+            # changing it in Infisical later does not change the password of the database (see README.md).
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cards-warehouse.secretName" . }}
+                  key: PGPASSWORD
+          ports:
+            - name: postgres
+              containerPort: 5432
+          # Over TCP, as the app connects: while the image creates the database, the server listens on its socket only.
+          readinessProbe:
+            exec:
+              command: [pg_isready, --host=127.0.0.1, --username={{ .Values.database.user }}, --dbname={{ .Values.database.name }}]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            # With the root filesystem read-only, the server writes its socket here, and temporary files in /tmp.
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  # One volume per pod, created on the first start and given back to the same pod at every restart.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}

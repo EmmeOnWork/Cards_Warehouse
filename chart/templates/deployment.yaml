@@ -7,6 +7,13 @@ metadata:
     secrets.infisical.com/auto-reload: "true"
 spec:
   replicas: {{ .Values.replicas }}
+  # A new version gets a pod of its own, and the old pod is removed only once the new one is Ready:
+  # if the migrations fail, the new pod never gets Ready, and the version already running keeps serving.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       {{- include "cards-warehouse.selectorLabels" . | nindent 6 }}
@@ -23,23 +30,25 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      # Before the app starts, from the same image: brings the database to the last migration of this version.
+      # On a new cluster it can start before the database is ready, fail, and be started again by Kubernetes.
+      initContainers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ required "image.tag: the commit to run" .Values.image.tag }}"
+          command: [python, -m, cards_warehouse.migrate]
+          securityContext:
+            {{- include "cards-warehouse.containerSecurityContext" . | nindent 12 }}
+          env:
+            {{- include "cards-warehouse.appEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ required "image.tag: the commit to run" .Values.image.tag }}"
           securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
-            readOnlyRootFilesystem: true
-          # A key missing from the Secret keeps the pod from starting, and the pod events name it.
+            {{- include "cards-warehouse.containerSecurityContext" . | nindent 12 }}
           env:
-            {{- range .Values.secrets }}
-            - name: {{ . }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "cards-warehouse.secretName" $ }}
-                  key: {{ . }}
-            {{- end }}
+            {{- include "cards-warehouse.appEnv" . | nindent 12 }}
           ports:
             - name: http
               containerPort: 8000

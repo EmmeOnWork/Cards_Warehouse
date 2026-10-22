@@ -2,12 +2,12 @@
 
 Desired state of the cluster, read and applied by Argo CD.
 
-Terraform creates a single Argo CD application, `root`, that follows [apps/](apps/) on the `production` branch of this repository. Whatever that folder holds reaches the cluster with no manual command: plain resources such as a namespace, and the Argo CD `Application` manifests of everything else (the app now; later monitoring and backups). This is the *app of apps* pattern.
+Terraform creates a single Argo CD application, `root`, that follows [apps/](apps/) on the `production` branch of this repository. Whatever that folder holds reaches the cluster with no manual command: plain resources such as a namespace, and the Argo CD `Application` manifests of everything else (the app with its database, and the Infisical operator, now; later backups). This is the *app of apps* pattern.
 
 | File | What it is |
 |---|---|
 | [apps/cards-warehouse-namespace.yaml](apps/cards-warehouse-namespace.yaml) | The app's namespace, which enforces the restricted Pod Security Standard |
-| [apps/cards-warehouse.yaml](apps/cards-warehouse.yaml) | The app: the [chart](../chart/) at the commit `production` points at, with the image of that commit |
+| [apps/cards-warehouse.yaml](apps/cards-warehouse.yaml) | The app and its PostgreSQL: the [chart](../chart/) at the commit `production` points at, with the image of that commit |
 | [apps/infisical-operator.yaml](apps/infisical-operator.yaml) | The Infisical operator, which copies secrets from Infisical Cloud into the cluster: its official chart, pinned, in the `infisical` namespace that Terraform creates with the operator's credential |
 
 - **`production` is the version in the cluster.** You work on `main`; the pipeline moves `production` to a commit only once its checks pass and its image is scanned and published. Argo CD reads everything from `production`, so a red `main` never reaches the cluster.
@@ -38,5 +38,7 @@ git push
 ```
 
 The revert is released like any commit: a build, then Argo CD. When it cannot wait for a build, move `production` back by hand to a commit that ran before, whose image is already on GHCR: `git push --force origin <good commit>:production`. The next push on `main` moves it forward again.
+
+**A migration is never reverted.** Every release migrates the database before the new version starts ([chart](../chart/README.md#migrations-at-every-release)). Code older than the database finds there a revision it does not know: its migrations fail, and the release stops with the newer version still serving. This holds for a `git revert` of a commit that adds a migration, and for `production` moved back by hand past one. Undo such a commit forward: a new commit that undoes the code, and a new migration that undoes the change to the database.
 
 `bash infra/platform/tests/release.sh` checks a release from end to end, with the platform up, and measures it: see [docs/measurements](../docs/measurements/commit-to-production.md).

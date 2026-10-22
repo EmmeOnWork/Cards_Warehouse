@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Acceptance test of a release, run by hand with the platform up, right after a push on main.
-# A rollback is a release too: the release of a `git revert`. Inside the toolbox (make shell):
+# Acceptance test of a release, run by hand with the platform up, right after a push on main: the new version
+# runs, its migrations applied. A rollback is a release too: the release of a `git revert`. Inside the toolbox (make shell):
 #   bash infra/platform/tests/release.sh [commit]
 # The commit defaults to the local HEAD. Each run ends with one row for
 # docs/measurements/commit-to-production.md: minutes and seconds from the push to each step.
@@ -64,8 +64,25 @@ production_points_at_the_commit() {
   [[ $head == "$pushed" ]] || { echo "      production: $head"; return 1; }
 }
 
+# The init container of the new pod ran the commit's migrations before the app started. The file of each
+# migration starts with its revision (a test in app/ checks it), so the last file names the revision expected.
+database_is_at_the_last_migration_of_the_commit() {
+  local last in_database
+  last=$(git ls-tree --name-only "$pushed" app/src/cards_warehouse/migrations/versions/ |
+    sed -n 's|.*/\([0-9]\{4\}\)_[^/]*\.py$|\1|p' | sort | tail -n 1)
+  in_database=$(kube --namespace cards-warehouse exec cards-warehouse-postgres-0 -- \
+    psql --username cards_warehouse --dbname cards_warehouse --tuples-only --no-align \
+    --command 'SELECT version_num FROM alembic_version')
+  [[ -n $last && $in_database == "$last" ]] || {
+    echo "      last migration of the commit: ${last:-none}; the database is at: ${in_database:-unreadable}"
+    return 1
+  }
+}
+
 echo "      waiting for the cluster to run $pushed"
 check "the cluster runs the pushed commit" cluster_runs_the_commit
+check "the database is at the commit's last migration, applied with no command by hand" \
+  database_is_at_the_last_migration_of_the_commit
 # The pipeline run of the push, read once the cluster runs the commit, so after the run has ended.
 run=$(github "actions/runs?head_sha=$pushed&event=push" | jq '.workflow_runs[0]')
 check "the pipeline of the pushed commit succeeded" pipeline_succeeded

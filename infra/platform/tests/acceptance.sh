@@ -192,6 +192,44 @@ app_reads_its_secret_from_infisical() {
   return 1
 }
 
+# The app answered healthy above, and its readiness asks the database: it connected with the password
+# the operator copied from Infisical, the one PostgreSQL was created with.
+database_password_comes_from_infisical() {
+  local owner password
+  owner=$(app get secret cards-warehouse-secrets -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null)
+  password=$(app get secret cards-warehouse-secrets -o jsonpath='{.data.PGPASSWORD}' 2>/dev/null)
+  [[ $owner == InfisicalStaticSecret && -n $password ]] || {
+    echo "      Secret owned by: ${owner:-nobody}; PGPASSWORD in it: ${password:+yes}"
+    return 1
+  }
+}
+
+database() { # database <SQL>: what PostgreSQL answers, asked through the socket inside its pod
+  app exec cards-warehouse-postgres-0 -- psql --username cards_warehouse --dbname cards_warehouse \
+    --tuples-only --no-align --command "$1"
+}
+
+# The migrations wrote the schema's revision into the database. Delete the pod: the StatefulSet starts a new
+# one, a new uid, on the same volume, and it finds the revision still there.
+database_keeps_its_data_when_its_pod_is_deleted() {
+  local before uid now after start=$SECONDS
+  before=$(database 'SELECT version_num FROM alembic_version') || return 1
+  uid=$(app get pod cards-warehouse-postgres-0 -o jsonpath='{.metadata.uid}')
+  app delete pod cards-warehouse-postgres-0 >/dev/null || return 1
+  while ((SECONDS - start < 120)); do
+    now=$(app get pod cards-warehouse-postgres-0 \
+      -o jsonpath='{.metadata.uid} {.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+    [[ ${now%% *} != "$uid" && $now == *" True" ]] && break
+    sleep 1
+  done
+  after=$(database 'SELECT version_num FROM alembic_version')
+  [[ -n $before && $after == "$before" ]] || {
+    echo "      revision before: $before; after the restart: ${after:-unreadable}"
+    return 1
+  }
+  echo "      a new pod was Ready after $((SECONDS - start)) s, with the data"
+}
+
 # Scale by hand, as someone with kubectl would, and wait for Argo CD to restore the count in Git.
 hand_scaling_is_undone() {
   local in_git replicas start=$SECONDS
@@ -239,6 +277,8 @@ check "the app answers healthy on the PC at localhost:8000" app_answers_healthy_
 check "the app reports the commit production points at" app_reports_the_version_in_git
 check "the cluster pulled the image from GHCR without credentials" image_pulled_from_ghcr_without_credentials
 check "a secret created in Infisical reaches the cluster and the app reads it" app_reads_its_secret_from_infisical
+check "the app connects to PostgreSQL with the password from Infisical" database_password_comes_from_infisical
+check "PostgreSQL keeps its data when its pod is deleted" database_keeps_its_data_when_its_pod_is_deleted
 check "a replica count changed by hand is undone by Argo CD" hand_scaling_is_undone
 check "a Service deleted by hand is created again by Argo CD" deleted_service_is_created_again
 check "the apply writes no file into the repository" repository_gets_no_new_file

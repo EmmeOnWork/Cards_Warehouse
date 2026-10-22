@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Multichannel inventory for trading cards"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.20.0",
     "fastapi>=0.143.1",
+    "psycopg[binary]>=3.3.6",
+    "sqlalchemy>=2.1.6",
     "uvicorn>=0.54.0",
 ]
 

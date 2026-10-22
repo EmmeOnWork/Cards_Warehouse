@@ -7,6 +7,7 @@ image:
 # an environment variable of the app, read from the Secret the Infisical operator fills.
 secrets:
   - SESSION_SECRET # signs the sessions
+  - PGPASSWORD # the database's password: PostgreSQL sets it at its first start, the app connects with it
 
 # Where those values live in Infisical Cloud.
 infisical:
@@ -42,11 +43,32 @@ readinessProbe:
     path: /readyz
     port: http
 
-# Measured on 2026-10-16: about 51 MiB after 600 requests. No CPU limit, so a burst is
+# Measured on 2026-10-21: about 55 MiB after 600 requests to /readyz, each one asking the database
+# (51 MiB on 2026-10-16, before the database). No CPU limit, so a burst is
 # never throttled; the memory limit stops a leak before it hurts the rest of the PC.
+# The migrations, which run before the app in the same pod, get the same.
 resources:
   requests:
     cpu: 50m
     memory: 64Mi
   limits:
     memory: 128Mi
+
+# The database the app and its migrations connect to, and as whom.
+database:
+  name: cards_warehouse
+  user: cards_warehouse
+
+# PostgreSQL in the cluster (templates/postgres.yaml). The version the tests run against too (app/tests).
+postgres:
+  image: postgres:18.6-trixie
+  # A volume on the kind node: it outlives the pod, not the cluster.
+  storage: 1Gi
+  # Measured on 2026-10-21: 34 MiB idle, 234 MiB after a pgbench run on a million rows, far more than
+  # the app will hold, with its 128 MiB of shared buffers full. No CPU limit, as for the app.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi

@@ -21,7 +21,7 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 |---|---|
 | `make hooks` | Enables the secret check before every commit, once per clone |
 | `make lint` | Checks the style of the Python code (ruff) and of the pipeline (actionlint) |
-| `make test` | Runs the app tests, including the ones that build and run the real image |
+| `make test` | Runs the app tests against a real PostgreSQL, including the ones that build and run the real image |
 | `make scan IMAGE=<image>` | Fails when the image has a HIGH or CRITICAL vulnerability with a fix |
 | `make app-shell` | Opens a shell with Python, uv, the Docker CLI, trivy and actionlint, in `app/` |
 | `make shell` | Opens a shell with Terraform, the AWS CLI, kubectl and Helm |
