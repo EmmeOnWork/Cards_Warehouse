@@ -7,13 +7,15 @@ Helm chart that packages the application for Kubernetes: a Deployment, a NodePor
 
 The Deployment gives the app each secret listed in `secrets` as an environment variable from that Secret. When a value changes, the operator restarts the Deployment (annotation `secrets.infisical.com/auto-reload`), since the app reads its secrets only at start.
 
+The app's pods run as the ServiceAccount `cards-warehouse`. A Role in Velero's namespace lets it list Velero's `Backup` objects and nothing else, so the home page can show the outcome of the last backup ([backup-reader.yaml](templates/backup-reader.yaml)).
+
 Argo CD renders it from this folder at the commit the `production` branch points at, through the `cards-warehouse` Application in [gitops/apps](../gitops/apps/cards-warehouse.yaml). That Application gives the one value the chart has no default for: `image.tag`, set to that same commit. Without it, rendering fails instead of running an unknown version.
 
 ## The database
 
 PostgreSQL runs in the cluster, without an operator: a StatefulSet with one replica, `cards-warehouse-postgres`, and a headless Service of the same name, the address the app connects to.
 
-- **The data live on a volume.** The StatefulSet asks for a 1Gi volume, which kind's default storage class creates on the node. A pod that is deleted or restarted gets the same volume back, and the volume outlives even the StatefulSet. It does not outlive the cluster: until the backups with Velero, `make platform-down` deletes the data.
+- **The data live on a volume.** The StatefulSet asks for a 1Gi volume, which kind's default storage class creates on the node. A pod that is deleted or restarted gets the same volume back, and the volume outlives even the StatefulSet. It does not outlive the cluster: `make platform-down` deletes it. What outlives the cluster is the daily copy of the database in S3, described below.
 - **The password comes from Infisical**, as `PGPASSWORD` in the app's folder. PostgreSQL reads it as `POSTGRES_PASSWORD` only at its first start, on an empty volume, to create the user `cards_warehouse`; the app reads it as `PGPASSWORD`, with `PGHOST`, `PGUSER` and `PGDATABASE` from the chart: the standard variables of libpq, so no address is in the code.
 - **Changing the password** in Infisical alone breaks the connection: the database keeps the old one. First change it in the database, inside `make shell`: psql asks for the new value twice and sends it already encrypted, so it lands in no command line, file or shell history. Then write the same value in Infisical:
 
@@ -22,7 +24,8 @@ PostgreSQL runs in the cluster, without an operator: a StatefulSet with one repl
   ```
 
   Within a minute the operator copies the new value from Infisical and restarts the app.
-- **Its pod meets the restricted standard too.** It runs as the image's `postgres` user, 999, with a read-only root filesystem: only the volume, the socket directory and `/tmp` are writable. The tests in `app/` run PostgreSQL the same way.
+- **A copy for the backups.** The pod's annotations tell Velero what to do at every backup: first run `pg_dump` in the container, which writes a consistent copy of the database into the `dump` volume, then copy that volume into the backups bucket. A copy that fails fails the backup. The data volume is not copied: see [backups](../gitops/README.md#backups).
+- **Its pod meets the restricted standard too.** It runs as the image's `postgres` user, 999, with a read-only root filesystem: only the volume, the socket directory, the `dump` volume and `/tmp` are writable. The tests in `app/` run PostgreSQL the same way.
 
 ## Migrations at every release
 
@@ -59,7 +62,7 @@ new version ─► new pod: init container migrate ─► app starts ─► Read
 | `postgres.storage` | `1Gi` | The size of the data volume |
 | `postgres.resources` | 50m CPU and 128Mi requested, 512Mi memory limit | Measured: 34 MiB idle, 234 MiB after a pgbench run on a million rows |
 
-Every pod meets the restricted [Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/), which the `cards-warehouse` namespace enforces: not root, no privilege escalation, no capabilities, read-only root filesystem. None mounts a Kubernetes API token, since neither the app nor PostgreSQL calls the API. These are fixed in the templates, not values.
+Every pod meets the restricted [Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/), which the `cards-warehouse` namespace enforces: not root, no privilege escalation, no capabilities, read-only root filesystem. PostgreSQL mounts no Kubernetes API token, since it never calls the API; the app's token can only list Velero's backups. These are fixed in the templates, not values.
 
 ## Checks
 
@@ -71,5 +74,6 @@ It runs, in the toolbox:
 
 1. `helm lint --strict`: the chart is well formed.
 2. `helm template | kubeconform -strict`: what the chart renders is valid against the schemas of Kubernetes 1.34.3, the version of the cluster, with no unknown field. The Infisical kinds are checked against the schemas of the community [CRD catalog](https://github.com/datreeio/CRDs-catalog), pinned by commit.
+3. `kubeconform -strict gitops`: the same check on the manifests Argo CD applies from [gitops/](../gitops/), its `Application` kind included. The values an `Application` passes to a chart are not checked, since no schema describes them.
 
 Helm is 4.2.1, the version Argo CD 3.5.4 renders charts with, so the checks see the same manifests as the cluster.

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 
 {% block content %}
+  <p{% if backup.alarm %} class="error"{% endif %}>{{ backup.text }}</p>
   <h1>Magazzino</h1>
 {% endblock %}

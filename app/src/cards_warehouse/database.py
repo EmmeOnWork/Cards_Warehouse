@@ -1,6 +1,10 @@
 """The connection to PostgreSQL, the same for the app and for the migrations."""
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, MetaData, create_engine
+
+# The tables as the code reads and writes them, each declared by the module that owns it, with only the
+# columns the code uses. Their whole structure, and its history, is in migrations/.
+metadata = MetaData()
 
 
 def create_database_engine() -> Engine:

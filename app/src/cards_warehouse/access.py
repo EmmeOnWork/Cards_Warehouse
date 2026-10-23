@@ -63,7 +63,8 @@ def protect(
 
     # Added last, so it runs first: the session is read before the check above. The session lives in
     # the cookie, signed with the key and its time: changing SESSION_SECRET in Infisical closes them all.
-    # Not Secure-only: the app is reached over plain HTTP until Tailscale brings HTTPS (task 28).
+    # Not Secure-only: the PC opens the app over plain HTTP, on its loopback. The phone gets HTTPS from Tailscale
+    # (infra/tailscale), inside a tailnet that encrypts everything already.
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,

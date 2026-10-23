@@ -22,8 +22,9 @@ spec:
       labels:
         {{- include "cards-warehouse.selectorLabels" . | nindent 8 }}
     spec:
-      # The app never calls the Kubernetes API: no token to steal.
-      automountServiceAccountToken: false
+      # Its token lets the app list Velero's backups, and nothing else (backup-reader.yaml).
+      serviceAccountName: {{ .Release.Name }}
+      automountServiceAccountToken: true
       # The restricted Pod Security Standard, enforced by the namespace: the image runs as
       # the numeric user 10001, so Kubernetes can check that it is not root.
       securityContext:

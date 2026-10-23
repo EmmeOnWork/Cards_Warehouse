@@ -1,0 +1,31 @@
+# The identity of the app's pods: the home page shows the outcome of the last backup, which the app reads
+# from Velero through the Kubernetes API (app/src/cards_warehouse/backups.py).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}
+---
+# It may list Velero's Backup objects, in Velero's namespace (gitops/apps/velero.yaml), and do nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-backup-reader
+  namespace: velero
+rules:
+  - apiGroups: [velero.io]
+    resources: [backups]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-backup-reader
+  namespace: velero
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-backup-reader

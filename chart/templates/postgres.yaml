@@ -28,6 +28,18 @@ spec:
     metadata:
       labels:
         {{- include "cards-warehouse.postgresSelectorLabels" . | nindent 8 }}
+      # Read by Velero at every backup (gitops/apps/velero.yaml): first pg_dump writes a consistent copy of the
+      # database into the dump volume, then Velero copies that volume into the bucket. Not the data volume: kind
+      # makes it a hostPath, which Velero cannot copy, and a copy of the files of a running server is not consistent.
+      annotations:
+        backup.velero.io/backup-volumes: dump
+        pre.hook.backup.velero.io/container: postgres
+        pre.hook.backup.velero.io/command: >-
+          ["pg_dump", "--username={{ .Values.database.user }}", "--dbname={{ .Values.database.name }}",
+          "--format=custom", "--file=/dump/{{ .Values.database.name }}.dump"]
+        # A failed copy fails the backup, and the home page of the app says so.
+        pre.hook.backup.velero.io/on-error: Fail
+        pre.hook.backup.velero.io/timeout: 5m
     spec:
       automountServiceAccountToken: false
       # The image's postgres user, by number, so Kubernetes can check that it is not root. The server
@@ -71,12 +83,17 @@ spec:
               mountPath: /var/run/postgresql
             - name: tmp
               mountPath: /tmp
+            - name: dump
+              mountPath: /dump
           resources:
             {{- toYaml .Values.postgres.resources | nindent 12 }}
       volumes:
         - name: run
           emptyDir: {}
         - name: tmp
+          emptyDir: {}
+        # The copy of the database that Velero saves (annotations above), written again at every backup.
+        - name: dump
           emptyDir: {}
   # One volume per pod, created on the first start and given back to the same pod at every restart.
   volumeClaimTemplates:

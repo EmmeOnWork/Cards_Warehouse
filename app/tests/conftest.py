@@ -5,8 +5,11 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from psycopg import sql
+from sqlalchemy import Connection
 
+from cards_warehouse.database import create_database_engine
 from cards_warehouse.main import create_app
+from cards_warehouse.migrate import migrate
 from tests.acceptance.containers import TEST_PASSWORD, TEST_PASSWORD_HASH, conninfo, running_postgres
 
 
@@ -49,3 +52,24 @@ def empty_database(postgres, monkeypatch) -> dict[str, str]:
     for variable, value in environment.items():
         monkeypatch.setenv(variable, value)
     return environment
+
+
+# A new database at the last migration, as a release leaves it.
+@pytest.fixture
+def database(empty_database) -> dict[str, str]:
+    migrate()
+    return empty_database
+
+
+# A connection to that database, for the tests of a module. Nothing is committed: the database goes with the test.
+@pytest.fixture
+def connection(database) -> Iterator[Connection]:
+    with create_database_engine().connect() as connection:
+        yield connection
+
+
+# Manuel, logged in, on a database of his own.
+@pytest.fixture
+def signed_in_client(database, client, password) -> TestClient:
+    client.post("/login", data={"password": password})
+    return client

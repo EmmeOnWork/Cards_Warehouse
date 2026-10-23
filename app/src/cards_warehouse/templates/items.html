@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Articoli</h1>
+  <p><a class="button" href="/items/new">Carica un articolo</a></p>
+  {% if listed %}
+    <table>
+      <thead>
+        <tr><th>Nome</th><th>Tipo</th><th>Gioco</th><th class="number">Qtà</th></tr>
+      </thead>
+      <tbody>
+        {% for item in listed %}
+          <tr>
+            <td>
+              {{ item.name }}
+              {% if item.cost_unknown %}<span class="tag">costo sconosciuto</span>{% endif %}
+            </td>
+            <td>{{ kinds[item.kind] }}</td>
+            <td>{{ item.game }}</td>
+            <td class="number">{{ item.available }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Ancora nessun articolo.</p>
+  {% endif %}
+{% endblock %}

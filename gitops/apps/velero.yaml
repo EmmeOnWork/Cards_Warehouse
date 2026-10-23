@@ -1,0 +1,80 @@
+# Velero: every day it saves the app's resources and a copy of its database into the backups bucket on S3.
+# Two sources: Velero's official Helm chart, pinned, and the folder gitops/velero of this repository,
+# which brings Velero its AWS credential from Infisical.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+  # Deleting this Application also deletes Velero, instead of leaving it running. The backups stay in the bucket.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://vmware-tanzu.github.io/helm-charts
+      chart: velero
+      targetRevision: 12.2.1 # released on 2026-10-08
+      helm:
+        valuesObject:
+          image:
+            # The chart ships 1.18.2; 1.18.4 (2026-09-28) fixes a backup queue that could stay stuck.
+            tag: v1.18.4
+          # The plugin that talks to S3, copied into the server's pod at start. Plugin 1.14 goes with Velero 1.18.
+          initContainers:
+            - name: velero-plugin-for-aws
+              image: docker.io/velero/velero-plugin-for-aws:v1.14.4
+              volumeMounts:
+                - name: plugins
+                  mountPath: /target
+          # Argo CD applies the CRDs in the chart's crds folder at every sync: no Job is needed to upgrade them.
+          upgradeCRDs: false
+          credentials:
+            # The AWS credentials file, written by the Infisical operator (gitops/velero/credentials.yaml).
+            existingSecret: velero-credentials
+          configuration:
+            backupStorageLocation:
+              - name: default
+                default: true
+                provider: aws
+                bucket: emmeonwork-cards-warehouse-backups
+                config:
+                  region: eu-north-1
+            # No disk snapshots: the volumes of kind have none to take.
+            volumeSnapshotLocation: []
+          snapshotsEnabled: false
+          # Copies the files of the volumes a pod names in its backup.velero.io/backup-volumes annotation:
+          # the copy of the database (chart/templates/postgres.yaml).
+          deployNodeAgent: true
+          schedules:
+            daily:
+              # 19:00 UTC: 21:00 in Italy on summer time, 20:00 in winter. When the PC is off at that hour,
+              # Velero runs one backup as soon as the cluster is back, without waiting for the next evening.
+              schedule: "0 19 * * *"
+              template:
+                # 30 days, then Velero deletes the backup, from the cluster and from the bucket.
+                ttl: 720h
+                includedNamespaces:
+                  - cards-warehouse
+                # They come from Infisical: a copy in the bucket would be one more place to guard.
+                excludedResources:
+                  - secrets
+                snapshotVolumes: false
+    - repoURL: https://github.com/EmmeOnWork/Cards_Warehouse.git
+      targetRevision: production
+      path: gitops/velero
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # On a new cluster this Application can sync before the Infisical operator has installed the kinds
+    # gitops/velero uses, and the sync fails. Argo CD never tries a failed revision again on its own: retry.
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

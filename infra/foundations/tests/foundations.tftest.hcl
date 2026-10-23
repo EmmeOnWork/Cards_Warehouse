@@ -69,6 +69,43 @@ run "app_credential_reaches_only_the_photos_and_backups_buckets" {
   }
 }
 
+# The permissions the AWS plugin of Velero asks for (github.com/vmware-tanzu/velero-plugin-for-aws). Without the
+# multipart ones, a large upload that fails leaves its parts in the bucket, paid for and never cleaned up.
+run "velero_can_write_the_backups_and_clean_up_failed_uploads" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for action in ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"] :
+      anytrue([
+        for s in jsondecode(aws_iam_user_policy.app.policy).Statement :
+        contains(s.Action, action) && contains(s.Resource, "arn:aws:s3:::emmeonwork-cards-warehouse-backups/*")
+      ])
+    ])
+    error_message = "The app credential must read, write and delete backups, and abort and list multipart uploads."
+  }
+}
+
+# Argo CD installs Velero from gitops/apps: the bucket it writes to must be the one these foundations create,
+# in the one Region the account may use (README.md).
+run "velero_backs_up_into_the_backups_bucket_of_the_foundations" {
+  command = plan
+
+  assert {
+    condition = [
+      for source in yamldecode(file("../../gitops/apps/velero.yaml")).spec.sources :
+      source.helm.valuesObject.configuration.backupStorageLocation if try(source.chart, "") == "velero"
+      ][0] == [{
+        name     = "default"
+        default  = true
+        provider = "aws"
+        bucket   = aws_s3_bucket.this["backups"].bucket
+        config   = { region = "eu-north-1" }
+    }]
+    error_message = "Velero's only backup location must be the backups bucket of the foundations, in eu-north-1."
+  }
+}
+
 run "budget_emails_when_monthly_spending_passes_a_few_dollars" {
   command = plan
 

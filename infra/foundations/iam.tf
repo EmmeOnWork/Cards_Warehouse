@@ -25,9 +25,14 @@ resource "aws_iam_user_policy" "app" {
         Resource = local.app_buckets
       },
       {
-        Sid      = "ReadAndWriteObjects"
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Sid    = "ReadAndWriteObjects"
+        Effect = "Allow"
+        # A large file is uploaded in parts: the last two let a failed upload be cleaned up instead of
+        # leaving its parts in the bucket, paid for. Velero's AWS plugin asks for them.
+        Action = [
+          "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
+          "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
+        ]
         Resource = [for bucket in local.app_buckets : "${bucket}/*"]
       },
     ]

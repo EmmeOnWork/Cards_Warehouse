@@ -108,3 +108,40 @@ run "the_infisical_operator_runs_where_terraform_and_the_app_chart_expect_it" {
     error_message = "The app's chart must use the default connection the operator's chart creates in the operator's namespace."
   }
 }
+
+# The phone opens https://<node name>, no port, and gets what a browser on the PC opens: the Tailscale node
+# serves HTTPS on 443 only, its certificate named after the node, and proxies only to the port of the PC
+# where the cluster publishes the node port of the app's chart.
+run "the_phone_https_address_leads_to_the_app" {
+  command = plan
+
+  assert {
+    condition = (
+      jsondecode(file("../tailscale/serve/serve.json")).TCP == { "443" = { HTTPS = true } } &&
+      keys(jsondecode(file("../tailscale/serve/serve.json")).Web) == ["$${TS_CERT_DOMAIN}:443"] &&
+      toset(flatten([
+        for site in values(jsondecode(file("../tailscale/serve/serve.json")).Web) : [
+          for handler in values(site.Handlers) : handler.Proxy
+        ]
+        ])) == toset([
+        for m in flatten([for node in flatten(kind_cluster.this.kind_config[*].node) : node.extra_port_mappings]) :
+        "http://${m.listen_address}:${m.host_port}" if m.container_port == yamldecode(file("../../chart/values.yaml")).service.nodePort
+      ])
+    )
+    error_message = "Tailscale must serve only HTTPS on 443 under the node's name, proxied only to the port of the PC that leads to the app."
+  }
+}
+
+# Neither the home network nor the internet reaches the app: the cluster publishes its port only on the PC's
+# loopback, and the Tailscale node serves it without Funnel, which would put it on the internet.
+run "only_the_pc_and_the_tailnet_reach_the_app" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for m in flatten([for node in flatten(kind_cluster.this.kind_config[*].node) : node.extra_port_mappings]) :
+      m.listen_address == "127.0.0.1" if m.container_port == yamldecode(file("../../chart/values.yaml")).service.nodePort
+    ]) && !anytrue(values(try(jsondecode(file("../tailscale/serve/serve.json")).AllowFunnel, {})))
+    error_message = "The app's port must listen only on the PC's loopback, and Tailscale must never turn Funnel on for it."
+  }
+}

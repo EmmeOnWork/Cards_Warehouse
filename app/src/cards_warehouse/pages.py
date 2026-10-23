@@ -13,4 +13,4 @@ router = APIRouter()
 
 @router.get("/")
 def home(request: Request):
-    return templates.TemplateResponse(request, "home.html")
+    return templates.TemplateResponse(request, "home.html", {"backup": request.app.state.backup_outcome()})

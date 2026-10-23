@@ -1,0 +1,9 @@
+# Namespace of Velero, the backups (velero.yaml).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+  labels:
+    # Not restricted like the others: Velero's node agent reads the volumes of every pod from the node's disk,
+    # through a hostPath mount and as root, which even the baseline standard refuses.
+    pod-security.kubernetes.io/enforce: privileged

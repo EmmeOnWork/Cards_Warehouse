@@ -2,17 +2,22 @@ import hashlib
 import os
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, Response
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
-from cards_warehouse import access, pages
+from cards_warehouse import access, backups, item_pages, pages
 from cards_warehouse.database import create_database_engine
 
 
-# uvicorn calls it with no arguments; the tests pass a clock they can move forward.
-def create_app(clock: Callable[[], float] = time.monotonic) -> FastAPI:
+# uvicorn calls it with no arguments; the tests pass clocks they control, and the backups Velero would list.
+def create_app(
+    clock: Callable[[], float] = time.monotonic,
+    now: Callable[[], datetime] = lambda: datetime.now(UTC),
+    read_backups: Callable[[], list[dict]] = backups.read_from_velero,
+) -> FastAPI:
     # Baked into the image at build time; "dev" when running outside a built image.
     app_version = os.environ.get("APP_VERSION", "dev")
     # From Infisical, through the operator and the pod's environment.
@@ -20,6 +25,8 @@ def create_app(clock: Callable[[], float] = time.monotonic) -> FastAPI:
     password_hash = os.environ["PASSWORD_HASH"]
     engine = create_database_engine()
     app = FastAPI(title="Cards Warehouse", version=app_version)
+    # For the pages, which each open their own connection or transaction.
+    app.state.engine = engine
 
     @app.get("/livez")
     def liveness() -> dict[str, str]:
@@ -45,7 +52,10 @@ def create_app(clock: Callable[[], float] = time.monotonic) -> FastAPI:
     def session_key() -> dict[str, str]:
         return {"fingerprint": hashlib.sha256(session_secret.encode()).hexdigest()[:16]}
 
+    # Read at every visit of the home page: a backup that just finished shows at once.
+    app.state.backup_outcome = lambda: backups.last_outcome(read_backups, now())
     app.include_router(pages.router)
+    app.include_router(item_pages.router)
     access.protect(
         app,
         password_hash=password_hash,

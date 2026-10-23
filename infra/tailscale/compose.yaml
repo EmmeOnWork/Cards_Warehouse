@@ -1,0 +1,32 @@
+# The Tailscale node magazzino: it brings the app to the phone over HTTPS, inside the tailnet,
+# with nothing published on the home network or the internet (README.md). Started by make tailscale-up.
+name: cards-warehouse-tailscale
+
+services:
+  tailscale:
+    # v1.104.2, the stable release of 2026-10-21, pinned by digest.
+    image: tailscale/tailscale:v1.104.2@sha256:b11583ad2e93e4671128538c88cf11f460444a5d7e449311dd1933a400ab849d
+    container_name: cards-warehouse-tailscale
+    # The network of the Docker host, where kind publishes the app on 127.0.0.1:8000: the port a browser
+    # on the PC opens, and the one serve.json proxies to. Independent of the cluster, so it outlives it.
+    network_mode: host
+    # Back up with Docker Desktop: the app is reachable whenever the PC is on.
+    restart: unless-stopped
+    environment:
+      TS_HOSTNAME: magazzino
+      # The node's identity: kept in the volume, or the node would join again as a new device, magazzino-1.
+      TS_STATE_DIR: /var/lib/tailscale
+      # No auth key, so no secret to keep: the first start asks for a login in the browser, then never again.
+      TS_AUTH_ONCE: "true"
+      # Tailscale's own network stack, in the process: nothing changes in the network of Docker's VM.
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+      # A way into the tailnet for the acceptance test, as the phone's path: on the loopback of Docker's VM only.
+      TS_OUTBOUND_HTTP_PROXY_LISTEN: 127.0.0.1:1055
+    volumes:
+      - state:/var/lib/tailscale
+      # The folder, not the file: the node notices when serve.json changes.
+      - ./serve:/config:ro
+
+volumes:
+  state:

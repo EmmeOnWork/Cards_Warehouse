@@ -10,7 +10,7 @@ Work in progress.
 |---|---|
 | [app/](app/) | FastAPI application |
 | [chart/](chart/) | Helm chart for the application |
-| [infra/](infra/) | Terraform: AWS foundations and the platform |
+| [infra/](infra/) | Terraform: AWS foundations and the platform; the Tailscale node that brings the app to the phone |
 | [gitops/](gitops/) | Configuration applied by Argo CD |
 
 ## Working on it
@@ -25,11 +25,13 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 | `make password-hash` | Asks for a new password of the app, without showing it, and prints the hash to put in Infisical |
 | `make scan IMAGE=<image>` | Fails when the image has a HIGH or CRITICAL vulnerability with a fix |
 | `make app-shell` | Opens a shell with Python, uv, the Docker CLI, trivy and actionlint, in `app/` |
-| `make shell` | Opens a shell with Terraform, the AWS CLI, kubectl and Helm |
+| `make shell` | Opens a shell with Terraform, the AWS CLI, kubectl, Helm and Velero |
 | `make tf-check` | Checks format and validity of the Terraform code and runs its tests |
-| `make chart-check` | Lints the Helm chart and validates what it renders against the Kubernetes schemas |
+| `make chart-check` | Lints the Helm chart, and validates what it renders and the manifests in [gitops/](gitops/) against the Kubernetes schemas |
 | `make platform-up` | Creates the kind cluster with Argo CD, which then applies [gitops/](gitops/): the app answers at <http://localhost:8000> |
 | `make platform-down` | Destroys the cluster, leaving the AWS foundations untouched |
+| `make backup` | Backs up the database now, the same as the daily backup, and waits for the outcome ([backups](gitops/README.md#backups)) |
+| `make tailscale-up` | Starts the Tailscale node that brings the app to the phone away from home, and prints its address: the first time, a login link ([how](infra/tailscale/README.md)) |
 
 ## Secret protection
 

@@ -72,7 +72,7 @@ Terraform creates the `cards-warehouse-app` user and its permissions, never its 
 For a leaked key, or once a year. A user can hold two keys, so the new one works before the old one stops:
 
 1. Create a second key as above and replace both values in Infisical. The free plan keeps no history of values, so the old secret is gone from Infisical from now on.
-2. Wait about a minute: the operator copies the new values into the cluster and restarts what reads them. Check that what uses the key (photos and backups, once they exist) still works.
+2. Wait about a minute: the operator copies the new values into the cluster and restarts what reads them. Velero needs no restart: it reads the key from a file of its Secret, which Kubernetes rewrites in its pods within about a minute. Check that what uses the key still works: for the backups, `make backup` ends with `Completed`; for the photos, once they exist, a photo opens.
 3. Deactivate the old key in IAM, check again, then delete it. If something breaks while the old key is only deactivated, reactivate it and look for what still reads the old values.
 4. Check that the user has exactly one key again (step 3 above).
 

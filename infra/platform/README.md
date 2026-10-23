@@ -62,7 +62,7 @@ Create a new client secret for `kind-cluster` in Infisical and write it into `pl
 
 - **The toolbox talks to the cluster.** kind creates the nodes as containers on the PC's Docker, through the docker CLI and the mounted socket. The toolbox runs on the network of the Docker host, where kind publishes the cluster API on `127.0.0.1`, so the kubeconfig written by kind works unchanged. That kubeconfig lives in a Docker volume mounted at `~/.kube`, out of the repository: left without a path, the kind provider would export it into the working directory.
 - **One apply, three steps.** Terraform creates the cluster, then configures the Helm provider from the cluster's attributes and installs Argo CD and the root application. The root application is a release of the `argocd-apps` chart, not a `kubernetes_manifest`, which would need the cluster to exist already when the plan is made.
-- **Only the PC's loopback.** The cluster publishes two node ports, Argo CD's on `127.0.0.1:8090` and the app's (30000, set by its chart) on `127.0.0.1:8000`, and its API on `127.0.0.1`: nothing is reachable from the home network. For the same reason, Argo CD serves the UI in plain HTTP. Port mappings are fixed when kind creates the node: changing them recreates the cluster.
+- **Only the PC's loopback.** The cluster publishes two node ports, Argo CD's on `127.0.0.1:8090` and the app's (30000, set by its chart) on `127.0.0.1:8000`, and its API on `127.0.0.1`: nothing is reachable from the home network. The phone reaches the app through [Tailscale](../tailscale/), which proxies to that same loopback port. For the same reason, Argo CD serves the UI in plain HTTP. Port mappings are fixed when kind creates the node: changing them recreates the cluster.
 - **Polling.** GitHub cannot reach the cluster, so Argo CD polls the repository, as described in [gitops/](../../gitops/).
 - **What the state holds.** The kind provider stores the cluster's kubeconfig in the state, client key included. That key only opens a cluster bound to the PC's loopback and dies with it. The state bucket is private.
 
@@ -85,6 +85,14 @@ bash infra/platform/tests/release.sh   # after a push on main, a revert included
 
 It waits until the app reports the pushed commit as its version, and checks that the database is at the commit's last migration, applied by the release itself. Then it checks, on GitHub, that the pipeline of the push succeeded and that `production` points at the commit. It ends with one row of [measurements](../../docs/measurements/commit-to-production.md): the time from the push to each step, from the clocks of GitHub, Argo CD and Kubernetes.
 
+The recreation is measured by hand, starting from no cluster:
+
+```sh
+bash infra/platform/tests/recreation.sh [cycles]   # inside make shell; 5 cycles, about ten minutes each
+```
+
+Each cycle runs the commands of `make platform-up`, waits until the app answers healthy on `localhost:8000`, destroys the platform and prints one row of [measurements](../../docs/measurements/platform-recreation.md). A cycle whose app is not healthy within 15 minutes stops the run, prints what the app was waiting for, and leaves the cluster up to inspect it.
+
 Changing a secret needs a person in Infisical, so it is a drill, run by hand with the platform up:
 
 ```sh
@@ -92,6 +100,14 @@ bash infra/platform/tests/rotation.sh   # inside make shell
 ```
 
 It asks you to give `SESSION_SECRET` a new value in Infisical, then prints the seconds until the new value is in the cluster and until the restarted app runs with it. Only fingerprints are printed, never values.
+
+The backups need the bucket and a day of schedule, so their test runs by hand too, with the platform up:
+
+```sh
+bash infra/platform/tests/backup.sh   # inside make shell, after aws login --remote
+```
+
+It backs up by hand and checks the backup from Velero to the bucket and to the app's home page: see [backups](../../gitops/README.md#backups).
 
 One behaviour needs a commit, so it is checked by hand: add a manifest to `gitops/apps` (a namespace, for example), push it, and it appears in the cluster within about three minutes of the end of the pipeline; remove it, push, and it is deleted.
 
