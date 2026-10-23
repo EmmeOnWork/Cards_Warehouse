@@ -5,7 +5,7 @@ kind: InfisicalAuth
 metadata:
   name: {{ .Release.Name }}
 spec:
-  # The address of Infisical, held by the operator's default connection (gitops/apps/infisical-operator.yaml).
+  # The address of Infisical, held by the connection declared in Git (gitops/infisical/connection.yaml).
   infisicalConnectionRef:
     name: {{ .Values.infisical.connection.name }}
     namespace: {{ .Values.infisical.connection.namespace }}

@@ -8,7 +8,7 @@ Terraform creates a single Argo CD application, `root`, that follows [apps/](app
 |---|---|
 | [apps/cards-warehouse-namespace.yaml](apps/cards-warehouse-namespace.yaml) | The app's namespace, which enforces the restricted Pod Security Standard |
 | [apps/cards-warehouse.yaml](apps/cards-warehouse.yaml) | The app and its PostgreSQL: the [chart](../chart/) at the commit `production` points at, with the image of that commit |
-| [apps/infisical-operator.yaml](apps/infisical-operator.yaml) | The Infisical operator, which copies secrets from Infisical Cloud into the cluster: its official chart, pinned, in the `infisical` namespace that Terraform creates with the operator's credential |
+| [apps/infisical-operator.yaml](apps/infisical-operator.yaml) | The Infisical operator, which copies secrets from Infisical Cloud into the cluster: its official chart, pinned, in the `infisical` namespace that Terraform creates with the operator's credential, and the folder [infisical/](infisical/), which tells it where Infisical is |
 | [apps/velero-namespace.yaml](apps/velero-namespace.yaml) | Velero's namespace, *privileged*: its node agent reads the volumes from the node's disk, as root |
 | [apps/velero.yaml](apps/velero.yaml) | [Backups](#backups) with Velero: its official chart, pinned, and the folder [velero/](velero/), which brings it the AWS credential from Infisical |
 
@@ -17,7 +17,8 @@ Terraform creates a single Argo CD application, `root`, that follows [apps/](app
 - **Polling.** GitHub cannot reach a cluster on the PC, so Argo CD polls the repository: every 120 seconds plus up to 60 seconds of jitter, the chart defaults. A moved `production` reaches the cluster within about three minutes.
 - **Automated sync with self-heal and prune.** A change made by hand in the cluster is undone, a resource deleted by hand is created again, and a manifest removed from Git is deleted from the cluster. Both `root` and the app's Application sync this way.
 - **Cascade delete.** The app's Application carries the Argo CD resources finalizer: if it leaves Git, what it installed is deleted with it, instead of being left running without an owner.
-- **Retry.** On a new cluster, the app's and Velero's Applications can sync before the operator has installed the kinds they use (`InfisicalAuth`, `InfisicalStaticSecret`), and that sync fails. Argo CD never tries a failed revision again on its own, so both retry, up to 10 times, waiting from 10 seconds up to 3 minutes.
+- **Retry.** On a new cluster, the app's and Velero's Applications can sync before the operator has installed the kinds they use (`InfisicalAuth`, `InfisicalStaticSecret`), and that sync fails. Argo CD never tries a failed revision again on its own, so these two and the operator's Application retry, up to 10 times, waiting from 10 seconds up to 3 minutes.
+- **The connection to Infisical is a plain manifest.** The operator's chart offers to create it, but as a Helm hook: Argo CD creates a hook only once the operator runs, then modifies it, and on two new clusters the operator never made that connection ready, so no secret arrived. [infisical/connection.yaml](infisical/connection.yaml) declares it instead, applied with the operator's CRDs.
 
 ## Release and rollback
 

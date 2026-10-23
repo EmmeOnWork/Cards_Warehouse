@@ -1,5 +1,6 @@
 # The Infisical operator: it copies secrets from Infisical Cloud into Kubernetes Secrets.
-# Argo CD renders its official Helm chart, at a pinned version, from Infisical's Helm repository.
+# Two sources: its official Helm chart, at a pinned version, from Infisical's Helm repository, and the folder
+# gitops/infisical of this repository, which tells the operator where Infisical is.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -10,17 +11,20 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
-    chart: secrets-operator
-    targetRevision: 0.11.12 # operator v0.11.12, released on 2026-10-16
-    helm:
-      valuesObject:
-        # The InfisicalConnection named "default" in this namespace: the address of Infisical Cloud,
-        # US region, for every InfisicalAuth that names it (chart/values.yaml).
-        defaultInfisicalConnection:
-          enabled: true
-          address: https://app.infisical.com
+  sources:
+    - repoURL: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+      chart: secrets-operator
+      targetRevision: 0.11.12 # operator v0.11.12, released on 2026-10-16
+      helm:
+        valuesObject:
+          # The chart would create the connection as a Helm hook, which Argo CD creates only once the operator
+          # runs, then modifies. On new clusters, on 2026-10-21 and 2026-10-23, the operator never made it ready,
+          # and no secret reached the cluster. gitops/infisical declares it instead, applied with the CRDs.
+          defaultInfisicalConnection:
+            enabled: false
+    - repoURL: https://github.com/EmmeOnWork/Cards_Warehouse.git
+      targetRevision: production
+      path: gitops/infisical
   destination:
     server: https://kubernetes.default.svc
     # Created by Terraform, with the credential the operator signs in with (infra/platform/infisical.tf).
@@ -29,3 +33,11 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # Argo CD never tries a failed revision again on its own: on 2026-10-19 one failed sync left the operator
+    # uninstalled for two days. Retry, as the app's and Velero's Applications do.
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

@@ -52,7 +52,7 @@ new version ─► new pod: init container migrate ─► app starts ─► Read
 | `infisical.projectSlug`, `.environment`, `.secretPath` | the project, `prod`, `/app` | Where the values live in Infisical |
 | `infisical.refreshInterval` | `60s` | How often the operator reads Infisical again |
 | `infisical.credentials` | `infisical-credentials` in `infisical` | The Secret Terraform creates with the cluster's credential |
-| `infisical.connection` | `default` in `infisical` | The operator's default connection, which holds the address of Infisical |
+| `infisical.connection` | `default` in `infisical` | The connection declared in [gitops/infisical](../gitops/infisical/connection.yaml), which holds the address of Infisical |
 | `replicas` | `1` | Always written into the Deployment, so Argo CD sees a change made by hand |
 | `service.nodePort` | `30000` | The node port the kind cluster maps to `127.0.0.1:8000` on the PC |
 | `livenessProbe`, `readinessProbe` | `/livez`, `/readyz` on the `http` port | The app's health endpoints. `/readyz` asks the database: while it does not answer, the pod gets no traffic, but it is not restarted |

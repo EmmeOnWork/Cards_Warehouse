@@ -97,15 +97,34 @@ run "the_infisical_operator_runs_where_terraform_and_the_app_chart_expect_it" {
     error_message = "Argo CD must install the Infisical operator in the namespace Terraform creates for it."
   }
 
+  # Not the connection the operator's chart offers: that one is a Helm hook, which Argo CD creates only once the
+  # operator runs, then modifies. On new clusters, on 2026-10-21 and 2026-10-23, the operator never made it ready.
   assert {
     condition = (
-      yamldecode(file("../../gitops/apps/infisical-operator.yaml")).spec.source.helm.valuesObject.defaultInfisicalConnection.enabled &&
+      [
+        for s in yamldecode(file("../../gitops/apps/infisical-operator.yaml")).spec.sources :
+        s.helm.valuesObject.defaultInfisicalConnection.enabled if try(s.chart, "") == "secrets-operator"
+      ] == [false] &&
+      anytrue([
+        for s in yamldecode(file("../../gitops/apps/infisical-operator.yaml")).spec.sources : try(
+          s.repoURL == "https://github.com/EmmeOnWork/Cards_Warehouse.git" && s.targetRevision == "production" &&
+          s.path == "gitops/infisical", false
+        )
+      ]) &&
+      yamldecode(file("../../gitops/infisical/connection.yaml")).kind == "InfisicalConnection" &&
+      yamldecode(file("../../gitops/infisical/connection.yaml")).metadata.namespace == kubernetes_namespace_v1.infisical.metadata[0].name
+    )
+    error_message = "The operator's Application must apply the connection declared in gitops/infisical, in the operator's namespace, not the one its chart creates as a hook."
+  }
+
+  assert {
+    condition = (
       yamldecode(file("../../chart/values.yaml")).infisical.connection == {
-        name      = "default"
+        name      = yamldecode(file("../../gitops/infisical/connection.yaml")).metadata.name
         namespace = kubernetes_namespace_v1.infisical.metadata[0].name
       }
     )
-    error_message = "The app's chart must use the default connection the operator's chart creates in the operator's namespace."
+    error_message = "The app's chart must use the connection declared in Git, in the operator's namespace."
   }
 }
 

@@ -1,0 +1,10 @@
+# Where Infisical is, for every InfisicalAuth that names this connection: the app's (chart/values.yaml) and
+# Velero's (gitops/velero/credentials.yaml). Infisical Cloud, US region, where the project lives.
+# A plain manifest, applied by the operator's Application together with its CRDs: see gitops/apps/infisical-operator.yaml.
+apiVersion: secrets.infisical.com/v1beta1
+kind: InfisicalConnection
+metadata:
+  name: default
+  namespace: infisical
+spec:
+  address: https://app.infisical.com

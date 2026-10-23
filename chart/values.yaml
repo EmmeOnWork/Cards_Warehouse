@@ -12,7 +12,7 @@ secrets:
 
 # Where those values live in Infisical Cloud.
 infisical:
-  # The address of Infisical: the default connection of the operator's chart (gitops/apps).
+  # The address of Infisical: the connection declared in gitops/infisical/connection.yaml.
   connection:
     name: default
     namespace: infisical
