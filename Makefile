@@ -2,7 +2,7 @@
 TOOLBOX := docker compose -f infra/toolbox/compose.yaml run --rm --build toolbox
 APP_DEV := docker compose -f app/compose.yaml run --rm --build dev
 
-.PHONY: shell tf-check chart-check platform-up platform-down app-shell lint test scan hooks
+.PHONY: shell tf-check chart-check platform-up platform-down app-shell lint test password-hash scan hooks
 
 shell: ## Open a shell with terraform, the AWS CLI, kubectl and Helm
 	$(TOOLBOX) bash
@@ -35,6 +35,9 @@ lint: ## Check style: ruff on the Python code, actionlint on the pipeline
 
 test: ## Run the app tests, unit and acceptance (builds and runs the real image)
 	$(APP_DEV) uv run pytest
+
+password-hash: ## Ask for a new app password, unseen, and print its hash: the value of PASSWORD_HASH in Infisical
+	$(APP_DEV) uv run --quiet python -m cards_warehouse.password
 
 scan: ## Fail when IMAGE=<image> has a HIGH or CRITICAL vulnerability with a fix (policy: app/trivy.yaml)
 	$(if $(IMAGE),,$(error usage: make scan IMAGE=<image>))

@@ -1,18 +1,23 @@
 import hashlib
 import os
+import time
+from collections.abc import Callable
 
 from fastapi import FastAPI, Response
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
+from cards_warehouse import access, pages
 from cards_warehouse.database import create_database_engine
 
 
-def create_app() -> FastAPI:
+# uvicorn calls it with no arguments; the tests pass a clock they can move forward.
+def create_app(clock: Callable[[], float] = time.monotonic) -> FastAPI:
     # Baked into the image at build time; "dev" when running outside a built image.
     app_version = os.environ.get("APP_VERSION", "dev")
     # From Infisical, through the operator and the pod's environment.
     session_secret = os.environ["SESSION_SECRET"]
+    password_hash = os.environ["PASSWORD_HASH"]
     engine = create_database_engine()
     app = FastAPI(title="Cards Warehouse", version=app_version)
 
@@ -40,4 +45,12 @@ def create_app() -> FastAPI:
     def session_key() -> dict[str, str]:
         return {"fingerprint": hashlib.sha256(session_secret.encode()).hexdigest()[:16]}
 
+    app.include_router(pages.router)
+    access.protect(
+        app,
+        password_hash=password_hash,
+        session_secret=session_secret,
+        public_paths={"/livez", "/readyz", "/version", "/session-key"},
+        clock=clock,
+    )
     return app

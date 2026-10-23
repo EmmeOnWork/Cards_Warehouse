@@ -45,7 +45,7 @@ new version ─► new pod: init container migrate ─► app starts ─► Read
 |---|---|---|
 | `image.repository` | `ghcr.io/emmeonwork/cards-warehouse` | Public image on GHCR: the node pulls it with no credentials |
 | `image.tag` | none, required | The commit to run |
-| `secrets` | `[SESSION_SECRET, PGPASSWORD]` | The secrets the app needs, by name only: the list in Git. A name missing from Infisical keeps the pod from starting |
+| `secrets` | `[SESSION_SECRET, PASSWORD_HASH, PGPASSWORD]` | The secrets the app needs, by name only: the list in Git. A name missing from Infisical keeps the pod from starting |
 | `infisical.projectSlug`, `.environment`, `.secretPath` | the project, `prod`, `/app` | Where the values live in Infisical |
 | `infisical.refreshInterval` | `60s` | How often the operator reads Infisical again |
 | `infisical.credentials` | `infisical-credentials` in `infisical` | The Secret Terraform creates with the cluster's credential |

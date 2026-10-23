@@ -7,13 +7,24 @@ from fastapi.testclient import TestClient
 from psycopg import sql
 
 from cards_warehouse.main import create_app
-from tests.acceptance.containers import conninfo, running_postgres
+from tests.acceptance.containers import TEST_PASSWORD, TEST_PASSWORD_HASH, conninfo, running_postgres
 
 
 # The app refuses to start without a session key: every test gets one, and the tests about it set their own.
 @pytest.fixture(autouse=True)
 def session_secret(monkeypatch):
     monkeypatch.setenv("SESSION_SECRET", "test-session-key")
+
+
+# Likewise for the hash of the password, which in the cluster comes from Infisical.
+@pytest.fixture(autouse=True)
+def password_hash(monkeypatch):
+    monkeypatch.setenv("PASSWORD_HASH", TEST_PASSWORD_HASH)
+
+
+@pytest.fixture
+def password() -> str:
+    return TEST_PASSWORD
 
 
 @pytest.fixture

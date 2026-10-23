@@ -13,10 +13,16 @@ import httpx
 import psycopg
 import pytest
 
+from cards_warehouse.password import hash_password
+
 APP_DIR = Path(__file__).resolve().parents[2]
 STARTUP_TIMEOUT_SECONDS = 30
 # The PostgreSQL of the cluster (chart/values.yaml): the tests run against the same version.
 POSTGRES_IMAGE = "postgres:18.6-trixie"
+# The password of the tests. Its hash is computed when they run, as Manuel does with make password-hash:
+# no hash is ever written in Git.
+TEST_PASSWORD = "a-long-test-password"
+TEST_PASSWORD_HASH = hash_password(TEST_PASSWORD)
 
 
 @contextmanager
@@ -47,8 +53,8 @@ def pulled_without_credentials(reference: str) -> Iterator[str]:
 def running_container(
     image: str, session_secret: str = "test-session-key", environment: dict[str, str] | None = None
 ) -> Iterator[httpx.Client]:
-    # The app refuses to start without a session key, as in the cluster without its Secret.
-    environment = {"SESSION_SECRET": session_secret, **(environment or {})}
+    # The app refuses to start without a session key and a password hash, as in the cluster without its Secret.
+    environment = {"SESSION_SECRET": session_secret, "PASSWORD_HASH": TEST_PASSWORD_HASH, **(environment or {})}
     container_id = _docker("run", "--detach", *_in_this_pod(), *_env_flags(environment), image)
     try:
         with httpx.Client(base_url="http://127.0.0.1:8000") as client:

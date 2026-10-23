@@ -7,6 +7,7 @@ image:
 # an environment variable of the app, read from the Secret the Infisical operator fills.
 secrets:
   - SESSION_SECRET # signs the sessions
+  - PASSWORD_HASH # the Argon2 hash of the app's password, from make password-hash: never the password itself
   - PGPASSWORD # the database's password: PostgreSQL sets it at its first start, the app connects with it
 
 # Where those values live in Infisical Cloud.
@@ -44,7 +45,8 @@ readinessProbe:
     port: http
 
 # Measured on 2026-10-21: about 55 MiB after 600 requests to /readyz, each one asking the database
-# (51 MiB on 2026-10-16, before the database). No CPU limit, so a burst is
+# (51 MiB on 2026-10-16, before the database). On 2026-10-23, 77 MiB after 34 logins: each one
+# takes 19 MiB for Argon2 (app/src/cards_warehouse/password.py), one at a time. No CPU limit, so a burst is
 # never throttled; the memory limit stops a leak before it hurts the rest of the PC.
 # The migrations, which run before the app in the same pod, get the same.
 resources:

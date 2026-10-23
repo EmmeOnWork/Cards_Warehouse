@@ -5,8 +5,12 @@ description = "Multichannel inventory for trading cards"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.0",
+    "argon2-cffi>=25.1.0",
     "fastapi>=0.143.1",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
     "psycopg[binary]>=3.3.6",
+    "python-multipart>=0.0.32",
     "sqlalchemy>=2.1.6",
     "uvicorn>=0.54.0",
 ]
