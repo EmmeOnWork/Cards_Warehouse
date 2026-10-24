@@ -4,6 +4,9 @@ from httpx import Response
 
 from cards_warehouse.main import create_app
 
+# The login reads the password from the database once it has been changed from the app: every test has one.
+pytestmark = pytest.mark.usefixtures("database")
+
 
 def test_a_page_without_a_session_sends_to_the_login(client):
     response = client.get("/", follow_redirects=False)

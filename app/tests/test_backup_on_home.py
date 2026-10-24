@@ -1,10 +1,14 @@
 import html
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 
 from cards_warehouse.main import create_app
 from tests.acceptance.containers import TEST_PASSWORD
+
+# The login reads the password from the database: every test has one.
+pytestmark = pytest.mark.usefixtures("database")
 
 # 21:30 in Italy, on summer time until the 25th.
 NOW = datetime(2026, 10, 23, 19, 30, tzinfo=UTC)

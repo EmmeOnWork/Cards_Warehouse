@@ -10,6 +10,9 @@ from tests.acceptance.containers import TEST_PASSWORD
 from tests.fake_ebay import CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, FakeEbay
 from tests.test_access import FakeClock
 
+# The login reads the password from the database: every test has one.
+pytestmark = pytest.mark.usefixtures("database")
+
 
 # "Collegato" only once eBay has given a short-lived token for the account: a stored credential alone proves nothing.
 def test_the_ebay_page_shows_a_connected_sandbox_account_and_when_its_authorization_ends(monkeypatch):

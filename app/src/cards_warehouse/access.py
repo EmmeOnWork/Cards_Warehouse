@@ -9,22 +9,23 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from cards_warehouse.pages import templates
-from cards_warehouse.password import check_password_hash, verify_password
+from cards_warehouse.password import StoredPassword
 
 SESSION_SECONDS = 30 * 24 * 60 * 60
 MAX_FAILURES = 5
 LOCK_SECONDS = 15 * 60
+# NIST's floor for a password the user chooses. templates/password.html asks the same.
+MIN_PASSWORD_LENGTH = 8
 
 
 def protect(
     app: FastAPI,
     *,
-    password_hash: str,
+    stored_password: StoredPassword,
     session_secret: str,
     public_paths: Iterable[str],
     clock: Callable[[], float],
 ) -> None:
-    check_password_hash(password_hash)
     public_paths = frozenset(public_paths) | {"/login"}
     lockout = _Lockout(clock)
 
@@ -39,12 +40,42 @@ def protect(
         if minutes := lockout.minutes_left():
             error = f"Troppi tentativi sbagliati: riprova tra {minutes} min."
             return templates.TemplateResponse(request, "login.html", {"error": error}, status_code=429)
-        if not verify_password(password_hash, password):
+        if not stored_password.verify(password):
             lockout.failed()
             return templates.TemplateResponse(request, "login.html", {"error": "Password sbagliata."}, status_code=401)
         lockout.succeeded()
         request.session["signed_in"] = True
         return RedirectResponse("/", status_code=303)
+
+    @app.get("/password")
+    def password_page(request: Request):
+        return templates.TemplateResponse(request, "password.html")
+
+    # Async for the same reason as the login. A wrong current password counts as a wrong login:
+    # this page is no way round the lock to guess it.
+    @app.post("/password")
+    async def change_password(
+        request: Request,
+        current: Annotated[str, Form()],
+        new: Annotated[str, Form()],
+        again: Annotated[str, Form()],
+    ):
+        if minutes := lockout.minutes_left():
+            return _password_page(request, f"Troppi tentativi sbagliati: riprova tra {minutes} min.", 429)
+        if not stored_password.verify(current):
+            lockout.failed()
+            return _password_page(request, "La password attuale è sbagliata.", 401)
+        lockout.succeeded()
+        if new != again:
+            return _password_page(request, "Le due password nuove sono diverse.", 422)
+        if len(new) < MIN_PASSWORD_LENGTH:
+            return _password_page(request, f"La nuova password ha almeno {MIN_PASSWORD_LENGTH} caratteri.", 422)
+        stored_password.change(new)
+        done = "Password cambiata: da ora si entra con quella nuova."
+        return templates.TemplateResponse(request, "password.html", {"done": done})
+
+    def _password_page(request: Request, error: str, status_code: int):
+        return templates.TemplateResponse(request, "password.html", {"error": error}, status_code=status_code)
 
     # A form post, not a link: a browser that prefetches links cannot log you out.
     @app.post("/logout")

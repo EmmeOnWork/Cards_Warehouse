@@ -23,6 +23,7 @@ def test_connecting_the_account_gives_the_values_to_put_in_infisical():
 
 
 # Pasted into Infisical as they are, next to the keys of the developer portal, they connect the app.
+@pytest.mark.usefixtures("database")
 def test_the_values_put_in_infisical_connect_the_app(monkeypatch):
     fake_ebay = FakeEbay()
     for name, value in connect(fake_ebay).items():

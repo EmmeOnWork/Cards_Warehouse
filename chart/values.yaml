@@ -7,7 +7,7 @@ image:
 # an environment variable of the app, read from the Secret the Infisical operator fills.
 secrets:
   - SESSION_SECRET # signs the sessions
-  - PASSWORD_HASH # the Argon2 hash of the app's password, from make password-hash: never the password itself
+  - PASSWORD_HASH # the Argon2 hash of the first password, and of a reset, from make password-hash: never the password itself
   - PGPASSWORD # the database's password: PostgreSQL sets it at its first start, the app connects with it
 
 # The same, but the pod starts without them: until make ebay-connect, the eBay page says "Non collegato" (docs/ebay.md).

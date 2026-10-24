@@ -6,6 +6,8 @@
   <h1>Accesso</h1>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/login">
+    {# Not read by the app, which has one user: it gives the browser's password manager a name to save it under. #}
+    <input name="username" type="text" autocomplete="username" value="manuel" hidden>
     <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
     <button type="submit">Entra</button>

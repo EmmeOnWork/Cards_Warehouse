@@ -10,9 +10,10 @@ from tests.acceptance.containers import built_image, running_container
 pytestmark = pytest.mark.acceptance
 
 
-# The container gets the hash of the tests' password, as the pod gets the one in Infisical.
-def test_the_built_app_opens_only_with_its_password_and_closes_on_logout(password):
-    with built_image() as image, running_container(image) as client:
+# The container gets the hash of the tests' password, as the pod gets the one in Infisical, and a database at the
+# last migration, where it looks for a password changed from the app.
+def test_the_built_app_opens_only_with_its_password_and_closes_on_logout(password, database):
+    with built_image() as image, running_container(image, environment=database) as client:
         assert client.get("/").headers["location"] == "/login"
         assert client.get("/api/anything").status_code == 401
 

@@ -11,6 +11,7 @@ from sqlalchemy.exc import OperationalError
 
 from cards_warehouse import access, backups, ebay, item_pages, pages
 from cards_warehouse.database import create_database_engine
+from cards_warehouse.password import StoredPassword
 
 
 # uvicorn calls it with no arguments; the tests pass clocks they control, the backups Velero would list,
@@ -64,7 +65,7 @@ def create_app(
     app.include_router(item_pages.router)
     access.protect(
         app,
-        password_hash=password_hash,
+        stored_password=StoredPassword(engine, infisical_hash=password_hash),
         session_secret=session_secret,
         public_paths={"/livez", "/readyz", "/version", "/session-key"},
         clock=clock,
