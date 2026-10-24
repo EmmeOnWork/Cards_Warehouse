@@ -44,4 +44,12 @@ database; a key missing from the Secret keeps the pod from starting, and the pod
       name: {{ include "cards-warehouse.secretName" $ }}
       key: {{ . }}
 {{- end }}
+{{- range .Values.optionalSecrets }}
+- name: {{ . }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "cards-warehouse.secretName" $ }}
+      key: {{ . }}
+      optional: true
+{{- end }}
 {{- end }}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}eBay · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>eBay</h1>
+  <p{% if ebay.alarm %} class="error"{% endif %}>{{ ebay.text }}</p>
+  {% if ebay.environment %}
+    <table>
+      <tr><th>Ambiente</th><td>{{ ebay.environment }}</td></tr>
+      <tr><th>Autorizzazione valida fino al</th><td>{{ ebay.expires }}</td></tr>
+    </table>
+  {% endif %}
+{% endblock %}

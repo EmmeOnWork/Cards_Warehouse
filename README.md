@@ -23,6 +23,7 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 | `make lint` | Checks the style of the Python code (ruff) and of the pipeline (actionlint) |
 | `make test` | Runs the app tests against a real PostgreSQL, including the ones that build and run the real image |
 | `make password-hash` | Asks for a new password of the app, without showing it, and prints the hash to put in Infisical |
+| `make ebay-connect` | Connects the eBay account: prints a link to agree on eBay, then the values to put in Infisical ([how](docs/ebay.md)) |
 | `make scan IMAGE=<image>` | Fails when the image has a HIGH or CRITICAL vulnerability with a fix |
 | `make app-shell` | Opens a shell with Python, uv, the Docker CLI, trivy and actionlint, in `app/` |
 | `make shell` | Opens a shell with Terraform, the AWS CLI, kubectl, Helm and Velero |

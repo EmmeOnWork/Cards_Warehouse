@@ -3,7 +3,7 @@
 # answering healthy on the PC. Each cycle creates the platform, measures it and destroys it. Inside the
 # toolbox (make shell), after `aws login --remote`:
 #   bash infra/platform/tests/recreation.sh [cycles]
-# Five cycles by default, about ten minutes each. Each cycle prints one row for
+# Five cycles by default, about three minutes each. Each cycle prints one row for
 # docs/measurements/platform-recreation.md. A cycle whose app never gets healthy stops the run and leaves
 # its cluster up, to look at it; then make platform-down.
 set -uo pipefail

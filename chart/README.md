@@ -5,7 +5,7 @@ Helm chart that packages the application for Kubernetes: a Deployment, a NodePor
 - `InfisicalAuth`: signs in to Infisical as the cluster's machine identity, with the credential Terraform puts in the `infisical` namespace;
 - `InfisicalStaticSecret`: copies the app's folder in Infisical into the Secret `cards-warehouse-secrets`, which it owns, and reads it again every minute.
 
-The Deployment gives the app each secret listed in `secrets` as an environment variable from that Secret. When a value changes, the operator restarts the Deployment (annotation `secrets.infisical.com/auto-reload`), since the app reads its secrets only at start.
+The Deployment gives the app each secret listed in `secrets` and `optionalSecrets` as an environment variable from that Secret. A name of `optionalSecrets` missing from Infisical leaves the variable unset instead of stopping the pod: these are the eBay values, which exist only once the account is connected ([docs/ebay.md](../docs/ebay.md)). When a value changes, the operator restarts the Deployment (annotation `secrets.infisical.com/auto-reload`), since the app reads its secrets only at start.
 
 The app's pods run as the ServiceAccount `cards-warehouse`. A Role in Velero's namespace lets it list Velero's `Backup` objects and nothing else, so the home page can show the outcome of the last backup ([backup-reader.yaml](templates/backup-reader.yaml)).
 
@@ -49,6 +49,7 @@ new version ─► new pod: init container migrate ─► app starts ─► Read
 | `image.repository` | `ghcr.io/emmeonwork/cards-warehouse` | Public image on GHCR: the node pulls it with no credentials |
 | `image.tag` | none, required | The commit to run |
 | `secrets` | `[SESSION_SECRET, PASSWORD_HASH, PGPASSWORD]` | The secrets the app needs, by name only: the list in Git. A name missing from Infisical keeps the pod from starting |
+| `optionalSecrets` | the five `EBAY_*` | The secrets the app can start without: missing from Infisical, the variable is not set |
 | `infisical.projectSlug`, `.environment`, `.secretPath` | the project, `prod`, `/app` | Where the values live in Infisical |
 | `infisical.refreshInterval` | `60s` | How often the operator reads Infisical again |
 | `infisical.credentials` | `infisical-credentials` in `infisical` | The Secret Terraform creates with the cluster's credential |

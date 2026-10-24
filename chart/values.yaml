@@ -10,6 +10,14 @@ secrets:
   - PASSWORD_HASH # the Argon2 hash of the app's password, from make password-hash: never the password itself
   - PGPASSWORD # the database's password: PostgreSQL sets it at its first start, the app connects with it
 
+# The same, but the pod starts without them: until make ebay-connect, the eBay page says "Non collegato" (docs/ebay.md).
+optionalSecrets:
+  - EBAY_ENVIRONMENT # sandbox or production: which eBay the keys and the credential below belong to
+  - EBAY_CLIENT_ID # the App ID of the keyset, from the developer portal
+  - EBAY_CLIENT_SECRET # the Cert ID of the same keyset
+  - EBAY_REFRESH_TOKEN # the durable credential, from make ebay-connect: with it the app asks for its short-lived tokens
+  - EBAY_AUTHORIZATION_EXPIRES # when that credential ends, from make ebay-connect
+
 # Where those values live in Infisical Cloud.
 infisical:
   # The address of Infisical: the connection declared in gitops/infisical/connection.yaml.

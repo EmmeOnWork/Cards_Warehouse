@@ -88,7 +88,7 @@ It waits until the app reports the pushed commit as its version, and checks that
 The recreation is measured by hand, starting from no cluster:
 
 ```sh
-bash infra/platform/tests/recreation.sh [cycles]   # inside make shell; 5 cycles, about ten minutes each
+bash infra/platform/tests/recreation.sh [cycles]   # inside make shell; 5 cycles, about three minutes each
 ```
 
 Each cycle runs the commands of `make platform-up`, waits until the app answers healthy on `localhost:8000`, destroys the platform and prints one row of [measurements](../../docs/measurements/platform-recreation.md). A cycle whose app is not healthy within 15 minutes stops the run, prints what the app was waiting for, and leaves the cluster up to inspect it.
