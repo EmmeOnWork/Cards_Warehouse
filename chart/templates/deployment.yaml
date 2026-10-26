@@ -59,3 +59,13 @@ spec:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # The only place the app writes: an uploaded file over 1 MB waits here until it is sent to S3, since the
+        # root filesystem is read-only. On the node's disk, not in memory, so a photo never counts against the
+        # memory limit. Room for a batch of 25 photos at the 20 MB limit (photo_pages.py).
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi

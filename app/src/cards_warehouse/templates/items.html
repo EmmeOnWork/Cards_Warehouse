@@ -12,8 +12,10 @@
         {% for item in listed %}
           <tr>
             <td>
-              {{ item.name }}
+              <a href="/items/{{ item.id }}">{{ item.name }}</a>
               {% if item.cost_unknown %}<span class="tag">costo sconosciuto</span>{% endif %}
+              {% set details = item.details | details_line %}
+              {% if details %}<br><small>{{ details }}</small>{% endif %}
             </td>
             <td>{{ kinds[item.kind] }}</td>
             <td>{{ item.game }}</td>

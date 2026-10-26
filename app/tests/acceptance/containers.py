@@ -53,8 +53,15 @@ def pulled_without_credentials(reference: str) -> Iterator[str]:
 def running_container(
     image: str, session_secret: str = "test-session-key", environment: dict[str, str] | None = None
 ) -> Iterator[httpx.Client]:
-    # The app refuses to start without a session key and a password hash, as in the cluster without its Secret.
-    environment = {"SESSION_SECRET": session_secret, "PASSWORD_HASH": TEST_PASSWORD_HASH, **(environment or {})}
+    # The app refuses to start without a session key, a password hash and its photos bucket, as in the cluster
+    # without its Secret and its chart's values. No test adds a photo here: nothing reaches AWS.
+    environment = {
+        "SESSION_SECRET": session_secret,
+        "PASSWORD_HASH": TEST_PASSWORD_HASH,
+        "PHOTOS_BUCKET": "test-photos",
+        "PHOTOS_REGION": "eu-north-1",
+        **(environment or {}),
+    }
     container_id = _docker("run", "--detach", *_in_this_pod(), *_env_flags(environment), image)
     try:
         with httpx.Client(base_url="http://127.0.0.1:8000") as client:

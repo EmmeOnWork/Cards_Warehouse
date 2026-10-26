@@ -10,6 +10,9 @@ credentials
 credentials-velero
 .aws/
 
+# --- Photos recovered from the bucket's versions (docs/photos.md): uploaded again, never committed ---
+recovered-photos/
+
 # --- Kubernetes ---
 *kubeconfig*
 .kube/

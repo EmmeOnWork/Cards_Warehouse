@@ -1,0 +1,61 @@
+{# The fields of an item, shared by the load and the edit: what it is and how it looks. #}
+<label for="kind">Tipo</label>
+<select id="kind" name="kind">
+  {% for kind in loadable %}
+    <option value="{{ kind }}"{% if form.kind == kind %} selected{% endif %}>{{ kinds[kind] }}</option>
+  {% endfor %}
+</select>
+
+<label for="game">Gioco</label>
+<select id="game" name="game">
+  {% for game in games %}
+    <option{% if form.game == game %} selected{% endif %}>{{ game }}</option>
+  {% endfor %}
+</select>
+<label for="new_game">Oppure un gioco nuovo</label>
+<input id="new_game" name="new_game" placeholder="Topps" value="{{ form.new_game }}">
+
+<label for="name">Nome</label>
+<input id="name" name="name" value="{{ form.name }}" required>
+
+<label for="language">Lingua</label>
+<select id="language" name="language">
+  {% for code, label in languages.items() %}
+    <option value="{{ code }}"{% if form.language == code %} selected{% endif %}>{{ label }}</option>
+  {% endfor %}
+</select>
+
+{# The fields of each kind, shown by the style of base.html only for the kind chosen. #}
+<div data-for="sealed">
+  <label for="product_type">Tipo di prodotto</label>
+  <input id="product_type" name="product_type" data-suggest="product_type" placeholder="Booster box" value="{{ form.product_type }}">
+</div>
+<div data-for="single_card sealed">
+  <label for="set_name">Set</label>
+  <input id="set_name" name="set_name" data-suggest="set_name" placeholder="Ossidiana Infuocata" value="{{ form.set_name }}">
+</div>
+<div data-for="single_card">
+  <label for="number">Numero</label>
+  <input id="number" name="number" placeholder="223/197" value="{{ form.number }}">
+  <label for="variant">Variante, se c'è</label>
+  <input id="variant" name="variant" data-suggest="variant" placeholder="Reverse Holo" value="{{ form.variant }}">
+  <label class="check">
+    <input type="checkbox" id="graded" name="graded"{% if form.graded %} checked{% endif %}>
+    Carta gradata
+  </label>
+  <div data-graded="no">
+    <label for="condition">Condizione</label>
+    <select id="condition" name="condition">
+      <option value="">Scegli la condizione</option>
+      {% for value, label in conditions.items() %}
+        <option value="{{ value }}"{% if form.condition == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div data-graded="yes">
+    <label for="grader">Ente di gradazione</label>
+    <input id="grader" name="grader" list="graders" placeholder="PSA" value="{{ form.grader }}">
+    <label for="grade">Voto</label>
+    <input id="grade" name="grade" inputmode="decimal" placeholder="9,5" value="{{ form.grade }}">
+  </div>
+</div>

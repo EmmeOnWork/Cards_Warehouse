@@ -52,7 +52,7 @@ Infisical (project cards-warehouse, environment prod, folder /app)
    TF_VAR_infisical_client_secret=<client secret>
    ```
 
-The `/aws` folder holds the key of the scoped AWS credential: see [the foundations](../foundations/README.md#the-app-credential).
+The `/aws` folder holds the key of the scoped AWS credential, which Velero and the app both read: see [the foundations](../foundations/README.md#the-app-credential).
 
 ### Replacing the cluster's credential
 

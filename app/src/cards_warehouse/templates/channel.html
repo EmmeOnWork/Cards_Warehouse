@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}{{ channel.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ channel.name }}</h1>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {# When the platform changes its fee: the prices proposed follow at once. #}
+  <form method="post" action="/channels/{{ channel.id }}">
+    <label for="fee_percent">Commissione in percentuale</label>
+    <input id="fee_percent" name="fee_percent" inputmode="decimal" value="{{ form.fee_percent }}" required>
+    <label for="fee_fixed">Più una parte fissa, in euro</label>
+    <input id="fee_fixed" name="fee_fixed" inputmode="decimal" value="{{ form.fee_fixed }}" required>
+    <button type="submit">Salva</button>
+  </form>
+{% endblock %}

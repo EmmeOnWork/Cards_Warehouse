@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Acquisti · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Acquisti</h1>
+  <p>
+    <a class="button" href="/items/new">Carica un acquisto</a>
+    <a href="/partners">Collaboratori</a>
+  </p>
+  {% if purchases %}
+    <table>
+      <thead>
+        <tr><th>Acquisto</th><th>Costo</th><th>Quote</th></tr>
+      </thead>
+      <tbody>
+        {% for purchase in purchases %}
+          <tr>
+            <td>
+              {{ purchase.purchased_on.strftime("%d/%m/%Y") }}<br>
+              {{ purchase.lots[0].item }} × {{ purchase.lots | sum(attribute="copies") }}
+              {% if purchase.note %}<br>{{ purchase.note }}{% endif %}
+            </td>
+            <td>
+              {{ purchase.total_cost_cents | euros }} €
+              {% if purchase.shipping_cents %} + spedizione {{ purchase.shipping_cents | euros }} €{% endif %}
+              {# What the app made of it: the cost of each copy, the cents left over on the first ones. #}
+              <br>per copia
+              {% for lot in purchase.lots %}
+                <br>{{ lot.unit_cost_cents | euros }} € × {{ lot.copies }}
+              {% endfor %}
+            </td>
+            <td>
+              {% for share in purchase.shares %}
+                {% if not loop.first %}<br>{% endif %}
+                {{ share.person }} {{ share.percent }} % · pagato {{ share.paid_cents | euros }} €
+              {% endfor %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Ancora nessun acquisto.</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Movimenti · {{ item.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ item.name }}</h1>
+  <p><a href="/items/{{ item.id }}">Torna all'articolo</a></p>
+
+  <section>
+    <h2>Movimenti</h2>
+    <p>Copie disponibili: {{ item.available }}</p>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Causa</th><th>Lotto</th><th class="number">Variazione</th></tr>
+      </thead>
+      <tbody>
+        {% for movement in history %}
+          <tr>
+            <td>{{ movement.at | day }}</td>
+            <td>
+              {{ causes[movement.cause] }}
+              {% if movement.note %}<br><small>{{ movement.note }}</small>{% endif %}
+            </td>
+            <td>{{ movement.lot }}</td>
+            <td class="number">{{ "%+d" | format(movement.change) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Rettifica</h2>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/items/{{ item.id }}/movements">
+      <label for="lot">Lotto</label>
+      <select id="lot" name="lot">
+        {% for lot in lots %}
+          <option value="{{ lot.number }}"{% if form.lot == lot.number | string %} selected{% endif %}>
+            Lotto {{ lot.number }} · {{ lot.available | copies }} ·
+            {% if lot.unit_cost_cents is none %}costo sconosciuto{% else %}{{ lot.unit_cost_cents | euros }} €{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+
+      <label for="cause">Causa</label>
+      <select id="cause" name="cause">
+        <option value="">Scegli la causa</option>
+        {% for choice, label in adjustments.items() %}
+          <option value="{{ choice }}"{% if form.cause == choice %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="quantity">Copie</label>
+      <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" value="{{ form.quantity }}" required>
+
+      <label for="note">Nota, se vuoi</label>
+      <input id="note" name="note" placeholder="Caduto dietro il mobile" value="{{ form.note }}">
+
+      <button type="submit">Registra la rettifica</button>
+    </form>
+  </section>
+{% endblock %}

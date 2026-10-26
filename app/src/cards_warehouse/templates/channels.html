@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Canali · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Canali</h1>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {# One setting for every channel: each price proposed leaves the cost plus this margin. #}
+  <form method="post" action="/target-margin">
+    <label for="target_margin">Obiettivo di margine sul costo, in percentuale</label>
+    <input id="target_margin" name="target_margin" inputmode="decimal" value="{{ margin_form.target_margin }}" required>
+    <button type="submit">Salva</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr><th>Canale</th><th>Commissione</th><th>Più copie per annuncio</th></tr>
+    </thead>
+    <tbody>
+      {% for channel in channels %}
+        <tr>
+          <td><a href="/channels/{{ channel.id }}">{{ channel.name }}</a></td>
+          <td>{{ channel.fee | fee }}</td>
+          <td>{{ "sì" if channel.multi_copy_listings else "no" }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Aggiungi un canale manuale</h2>
+  <form method="post" action="/channels">
+    <label for="name">Nome</label>
+    <input id="name" name="name" placeholder="Cardmarket" value="{{ new_channel.name }}" required>
+    <label for="fee_percent">Commissione in percentuale</label>
+    <input id="fee_percent" name="fee_percent" inputmode="decimal" value="{{ new_channel.fee_percent }}" required>
+    <label for="fee_fixed">Più una parte fissa, in euro</label>
+    <input id="fee_fixed" name="fee_fixed" inputmode="decimal" value="{{ new_channel.fee_fixed }}" required>
+    {# On Vinted a listing is one copy, and closes when it is sold. #}
+    <label class="check">
+      <input type="checkbox" name="multi_copy_listings"{% if new_channel.multi_copy_listings %} checked{% endif %}>
+      Un annuncio può offrire più copie
+    </label>
+    <button type="submit">Aggiungi</button>
+  </form>
+{% endblock %}

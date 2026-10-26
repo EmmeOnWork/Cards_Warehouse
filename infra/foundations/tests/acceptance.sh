@@ -16,6 +16,7 @@ if ! terraform init -input=false >/dev/null || ! state_bucket=$(terraform output
 fi
 state_key=foundations/terraform.tfstate
 photos_bucket=$(terraform output -raw photos_bucket)
+photos_region=$(aws s3api get-bucket-location --bucket "$photos_bucket" --query LocationConstraint --output text)
 backups_bucket=$(terraform output -raw backups_bucket)
 app_user=$(terraform output -raw app_user)
 
@@ -107,6 +108,23 @@ reads_and_writes() { # reads_and_writes <bucket>
     as_app s3api delete-object --bucket "$1" --key "$probe" >/dev/null
 }
 
+# A photo as a browser sees it: its plain address, and a link signed with the app key, as the app signs them.
+plain_address_is_denied() { # plain_address_is_denied <bucket>
+  local answer
+  as_app s3api put-object --bucket "$1" --key "$probe" --body "$probe_file" >/dev/null &&
+    answer=$(curl --silent "https://$1.s3.$photos_region.amazonaws.com/$probe") &&
+    grep -q '<Code>AccessDenied</Code>' <<<"$answer"
+}
+
+signed_link_opens_then_expires() { # signed_link_opens_then_expires <bucket>
+  local link
+  as_app s3api put-object --bucket "$1" --key "$probe" --body "$probe_file" >/dev/null &&
+    link=$(as_app s3 presign "s3://$1/$probe" --region "$photos_region" --expires-in 5) &&
+    [[ $(curl --silent --output /dev/null --write-out '%{http_code}' "$link") == 200 ]] &&
+    sleep 7 &&
+    curl --silent "$link" | grep -q '<Message>Request has expired</Message>'
+}
+
 is_denied() { # is_denied <aws arguments...>: the app key gets an authorization error
   local out
   if out=$(as_app "$@" 2>&1); then return 1; fi
@@ -157,6 +175,8 @@ read -r key_id key_secret < <(aws iam create-access-key --user-name "$app_user" 
   --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text)
 check "a temporary key of the app user is accepted" key_is_accepted
 check "the app key reads and writes in the photos bucket" reads_and_writes "$photos_bucket"
+check "the plain address of a photo answers AccessDenied" plain_address_is_denied "$photos_bucket"
+check "a link signed with the app key opens a photo, then expires" signed_link_opens_then_expires "$photos_bucket"
 check "the app key reads and writes in the backups bucket" reads_and_writes "$backups_bucket"
 check "the app key cannot read the Terraform state" is_denied s3api get-object --bucket "$state_bucket" --key "$state_key" /dev/null
 check "the app key cannot write into the state bucket" is_denied s3api put-object --bucket "$state_bucket" --key "$probe" --body "$probe_file"

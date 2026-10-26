@@ -9,18 +9,30 @@ from fastapi import FastAPI, Response
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
-from cards_warehouse import access, backups, ebay, item_pages, pages
+from cards_warehouse import (
+    access,
+    backups,
+    channel_pages,
+    ebay,
+    item_pages,
+    movement_pages,
+    pages,
+    photo_pages,
+    photos,
+    purchase_pages,
+)
 from cards_warehouse.database import create_database_engine
 from cards_warehouse.password import StoredPassword
 
 
 # uvicorn calls it with no arguments; the tests pass clocks they control, the backups Velero would list,
-# and a client whose requests reach a fake eBay.
+# a client whose requests reach a fake eBay, and a photos bucket in memory.
 def create_app(
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     read_backups: Callable[[], list[dict]] = backups.read_from_velero,
     ebay_http: httpx.Client | None = None,
+    photo_store: photos.Store | None = None,
 ) -> FastAPI:
     # Baked into the image at build time; "dev" when running outside a built image.
     app_version = os.environ.get("APP_VERSION", "dev")
@@ -61,8 +73,14 @@ def create_app(
     # A slow eBay delays the eBay page by 10 s at most.
     ebay_account = ebay.account_from_environment(ebay_http or httpx.Client(timeout=10), clock)
     app.state.ebay_status = lambda: ebay.status(ebay_account)
+    # The private bucket of the foundations, with the scoped key from Infisical. Nothing is asked to AWS here.
+    app.state.photos = photo_store or photos.S3Store.from_environment()
     app.include_router(pages.router)
     app.include_router(item_pages.router)
+    app.include_router(channel_pages.router)
+    app.include_router(photo_pages.router)
+    app.include_router(movement_pages.router)
+    app.include_router(purchase_pages.router)
     access.protect(
         app,
         stored_password=StoredPassword(engine, infisical_hash=password_hash),

@@ -3,11 +3,17 @@
 Helm chart that packages the application for Kubernetes: a Deployment, a NodePort Service, PostgreSQL, and the two resources of the Infisical operator that bring the app its secrets:
 
 - `InfisicalAuth`: signs in to Infisical as the cluster's machine identity, with the credential Terraform puts in the `infisical` namespace;
-- `InfisicalStaticSecret`: copies the app's folder in Infisical into the Secret `cards-warehouse-secrets`, which it owns, and reads it again every minute.
+- `InfisicalStaticSecret`: copies two folders of Infisical, the app's `/app` and `/aws`, into the Secret `cards-warehouse-secrets`, which it owns, and reads them again every minute.
 
 The Deployment gives the app each secret listed in `secrets` and `optionalSecrets` as an environment variable from that Secret. A name of `optionalSecrets` missing from Infisical leaves the variable unset instead of stopping the pod: these are the eBay values, which exist only once the account is connected ([docs/ebay.md](../docs/ebay.md)). When a value changes, the operator restarts the Deployment (annotation `secrets.infisical.com/auto-reload`), since the app reads its secrets only at start.
 
 The app's pods run as the ServiceAccount `cards-warehouse`. A Role in Velero's namespace lets it list Velero's `Backup` objects and nothing else, so the home page can show the outcome of the last backup ([backup-reader.yaml](templates/backup-reader.yaml)).
+
+## Photos
+
+The item photos live in the private S3 bucket of the foundations, named in `photos.bucket` ([docs/photos.md](../docs/photos.md)). The app reaches it with the key of the scoped user `cards-warehouse-app`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the `/aws` folder. It is the same key Velero uses, so a single key is replaced for both ([replacing it](../infra/foundations/README.md#replacing-the-key)). The app signs each photo's link with that key, valid for 5 minutes, and the browser downloads the photo straight from S3.
+
+The root filesystem of the app is read-only. An upload over 1 MB is written to a file while it waits to be sent to S3, so `/tmp` is an `emptyDir` volume: on the node's disk, so that a photo never counts against the memory limit, and sized for 25 photos at the limit of 20 MB each.
 
 Argo CD renders it from this folder at the commit the `production` branch points at, through the `cards-warehouse` Application in [gitops/apps](../gitops/apps/cards-warehouse.yaml). That Application gives the one value the chart has no default for: `image.tag`, set to that same commit. Without it, rendering fails instead of running an unknown version.
 
@@ -48,9 +54,10 @@ new version ─► new pod: init container migrate ─► app starts ─► Read
 |---|---|---|
 | `image.repository` | `ghcr.io/emmeonwork/cards-warehouse` | Public image on GHCR: the node pulls it with no credentials |
 | `image.tag` | none, required | The commit to run |
-| `secrets` | `[SESSION_SECRET, PASSWORD_HASH, PGPASSWORD]` | The secrets the app needs, by name only: the list in Git. A name missing from Infisical keeps the pod from starting |
+| `secrets` | `[SESSION_SECRET, PASSWORD_HASH, PGPASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]` | The secrets the app needs, by name only: the list in Git. A name missing from Infisical keeps the pod from starting |
 | `optionalSecrets` | the five `EBAY_*` | The secrets the app can start without: missing from Infisical, the variable is not set |
-| `infisical.projectSlug`, `.environment`, `.secretPath` | the project, `prod`, `/app` | Where the values live in Infisical |
+| `infisical.projectSlug`, `.environment`, `.secretPath`, `.awsPath` | the project, `prod`, `/app`, `/aws` | Where the values live in Infisical |
+| `photos.bucket`, `photos.region` | `emmeonwork-cards-warehouse-photos`, `eu-north-1` | The bucket of the item photos, from the foundations |
 | `infisical.refreshInterval` | `60s` | How often the operator reads Infisical again |
 | `infisical.credentials` | `infisical-credentials` in `infisical` | The Secret Terraform creates with the cluster's credential |
 | `infisical.connection` | `default` in `infisical` | The connection declared in [gitops/infisical](../gitops/infisical/connection.yaml), which holds the address of Infisical |

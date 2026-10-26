@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Foto non caricate · Magazzino{% endblock %}
+
+{# A page of its own: a file field cannot be filled in again, so Manuel goes back and picks again. #}
+{% block content %}
+  <h1>Foto non caricate</h1>
+  <p class="error" role="alert">{{ reason }}</p>
+  <p>Non è stata caricata nessuna delle foto scelte insieme: scegline di nuovo.</p>
+  <p><a class="button" href="/items/{{ item_id }}">Torna all'articolo</a></p>
+{% endblock %}

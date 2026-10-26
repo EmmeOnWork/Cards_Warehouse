@@ -5,8 +5,13 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 
+from cards_warehouse.money import format_euros, format_percent
+
 # Inside the package, so the image carries them without the sources.
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+# Amounts and percentages as a person reads them, and types them back into a field.
+templates.env.filters["euros"] = format_euros
+templates.env.filters["percent"] = format_percent
 
 router = APIRouter()
 

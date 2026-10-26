@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}{{ partner.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ partner.name }}</h1>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {# The purchases shared with the partner follow the new name. #}
+  <form method="post" action="/partners/{{ partner.id }}">
+    <label for="name">Nome</label>
+    <input id="name" name="name" value="{{ form.name }}" required>
+    <button type="submit">Rinomina</button>
+  </form>
+  <p><a href="/partners">Tutti i collaboratori</a></p>
+{% endblock %}

@@ -37,6 +37,10 @@ database; a key missing from the Secret keeps the pod from starting, and the pod
   value: {{ .Values.database.name }}
 - name: PGUSER
   value: {{ .Values.database.user }}
+- name: PHOTOS_BUCKET
+  value: {{ .Values.photos.bucket }}
+- name: PHOTOS_REGION
+  value: {{ .Values.photos.region }}
 {{- range .Values.secrets }}
 - name: {{ . }}
   valueFrom:

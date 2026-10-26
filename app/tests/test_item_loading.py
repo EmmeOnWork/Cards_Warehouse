@@ -15,7 +15,7 @@ SEALED_BOX = {
     "name": "Booster box Evoluzioni a Paldea",
     "language": "it",
     "quantity": "1",
-    "unit_cost": "89,90",
+    "total_cost": "89,90",
 }
 
 
@@ -30,7 +30,7 @@ def test_a_sealed_in_5_identical_copies_is_listed_once_with_5_available(signed_i
 
 # A cost forgotten is not a cost of zero: the margins will leave the item out, and the list shows which ones.
 def test_a_cost_not_known_is_saved_as_such_and_marked_in_the_list(signed_in_client):
-    long_ago = {**SEALED_BOX, "name": "Bought long ago", "unit_cost": "", "unknown_cost": "on"}
+    long_ago = {**SEALED_BOX, "name": "Bought long ago", "total_cost": "", "unknown_cost": "on"}
     signed_in_client.post("/items", data=long_ago)
     signed_in_client.post("/items", data={**SEALED_BOX, "name": "Bought last week"})
 
@@ -42,11 +42,11 @@ def test_a_cost_not_known_is_saved_as_such_and_marked_in_the_list(signed_in_clie
 
 # The page comes back with the reason and with what Manuel typed, so on the phone he fixes one field, not all.
 def test_a_known_cost_of_zero_is_refused_pointing_to_the_cost_not_known(signed_in_client):
-    response = signed_in_client.post("/items", data={**SEALED_BOX, "unit_cost": "0"})
+    response = signed_in_client.post("/items", data={**SEALED_BOX, "total_cost": "0"})
 
     assert response.status_code == 422
     page = html.unescape(response.text)
-    assert "Il costo vale almeno 0,01 €: se non lo conosci, spunta «Costo sconosciuto»." in page
+    assert "Il costo totale vale almeno 0,01 €: se non lo conosci, spunta «Costo sconosciuto»." in page
     assert 'value="Booster box Evoluzioni a Paldea"' in page
     assert table_rows(signed_in_client.get("/items").text) == []
 
@@ -74,8 +74,8 @@ def test_the_bulk_kind_is_neither_offered_nor_accepted_by_the_load_page(signed_i
 @pytest.mark.parametrize(
     ("fields", "reason"),
     [
-        ({"unit_cost": ""}, "Scrivi il costo di una copia, oppure spunta «Costo sconosciuto»."),
-        ({"unit_cost": "12,345"}, "Scrivi il costo in euro, con al massimo due decimali: per esempio 12,50."),
+        ({"total_cost": ""}, "Scrivi il costo totale, oppure spunta «Costo sconosciuto»."),
+        ({"total_cost": "12,345"}, "Scrivi il costo in euro, con al massimo due decimali: per esempio 12,50."),
         ({"quantity": "0"}, "Le copie sono almeno 1."),
         ({"quantity": "due"}, "Le copie sono almeno 1."),
     ],

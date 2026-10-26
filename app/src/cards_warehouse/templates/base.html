@@ -29,13 +29,24 @@
     button, .button { padding: .5rem 1rem; border: 0; border-radius: .375rem; background: var(--accent); color: #fff; }
     .button { display: inline-flex; align-items: center; min-height: 2.75rem; text-decoration: none; }
     .error { color: #dc2626; font-weight: 600; }
+    /* The photos of an item, as wide as the screen, with their buttons below. */
+    figure { margin: 0 0 1.5rem; }
+    figure img { display: block; width: 100%; height: auto; border-radius: .375rem; }
+    figure form { display: inline-flex; gap: .5rem; margin: .5rem .5rem 0 0; }
+    .danger { background: #dc2626; }
+    /* The load and edit pages ask only for the fields of the kind chosen, and of the card graded or not. */
+    .load [data-for] { display: none; }
+    .load:has(#kind [value=single_card]:checked) [data-for~=single_card],
+    .load:has(#kind [value=sealed]:checked) [data-for~=sealed] { display: block; }
+    .load:has(#graded:checked) [data-graded=no],
+    .load:has(#graded:not(:checked)) [data-graded=yes] { display: none; }
   </style>
 </head>
 <body>
   <header>
     <a href="/">Magazzino</a>
     {% if request.session.get("signed_in") %}
-      <nav><a href="/items">Articoli</a><a href="/ebay">eBay</a></nav>
+      <nav><a href="/items">Articoli</a><a href="/purchases">Acquisti</a><a href="/channels">Canali</a><a href="/ebay">eBay</a></nav>
       <form method="post" action="/logout"><button type="submit">Esci</button></form>
     {% endif %}
   </header>

@@ -1,0 +1,23 @@
+{# The values already typed, offered again as Manuel writes: one list per game, in the order of the menu. #}
+{% for game in games %}
+  {% set index = loop.index0 %}
+  {% for field, values in suggestions.get(game, {}).items() %}
+    <datalist id="{{ field }}-{{ index }}" data-field="{{ field }}" data-game="{{ game }}">
+      {% for value in values %}<option value="{{ value }}">{% endfor %}
+    </datalist>
+  {% endfor %}
+{% endfor %}
+<datalist id="graders" data-field="grader">
+  {% for grader in graders %}<option value="{{ grader }}">{% endfor %}
+</datalist>
+<script>
+  // Each field suggests the values of the game chosen: the sets of Pokémon are not offered for One Piece.
+  const game = document.getElementById("game");
+  const suggest = () => {
+    for (const input of document.querySelectorAll("[data-suggest]")) {
+      input.setAttribute("list", `${input.dataset.suggest}-${game.selectedIndex}`);
+    }
+  };
+  game.addEventListener("change", suggest);
+  suggest();
+</script>

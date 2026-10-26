@@ -1,0 +1,33 @@
+{# The photos section of the item's page (item.html). #}
+<section>
+  <h2>Foto</h2>
+  {# The first is the cover: the photo the channels show first. Each one is downloaded whole from S3, on the
+     phone's data too: lazy, only once scrolled near. #}
+  {% for photo in photos %}
+    <figure>
+      <img src="{{ photo.link }}" alt="{{ 'Copertina' if loop.first else 'Foto %d' % loop.index }}" loading="lazy">
+      {% if loop.first %}<figcaption>Copertina</figcaption>{% endif %}
+      {% if loop.length > 1 %}
+        <form method="post" action="{{ request.url.path }}/photos/{{ photo.id }}/move">
+          {% if not loop.first %}
+            <button name="towards" value="earlier" aria-label="Sposta prima la foto {{ loop.index }}">↑</button>
+          {% endif %}
+          {% if not loop.last %}
+            <button name="towards" value="later" aria-label="Sposta dopo la foto {{ loop.index }}">↓</button>
+          {% endif %}
+        </form>
+      {% endif %}
+      {# A finger slips on a phone: the browser asks first. #}
+      <form method="post" action="{{ request.url.path }}/photos/{{ photo.id }}/delete"
+            onsubmit="return confirm('Eliminare la foto {{ loop.index }}?')">
+        <button class="danger" aria-label="Elimina la foto {{ loop.index }}">Elimina</button>
+      </form>
+    </figure>
+  {% endfor %}
+  {# No capture attribute: the phone offers both the camera and the gallery. #}
+  <form method="post" action="{{ request.url.path }}/photos" enctype="multipart/form-data">
+    <label for="photos">Scatta o scegli le foto, fino a {{ max_photo_mb }} MB l'una</label>
+    <input id="photos" name="photos" type="file" accept="image/*" multiple required>
+    <button type="submit">Carica</button>
+  </form>
+</section>

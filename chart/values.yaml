@@ -9,6 +9,9 @@ secrets:
   - SESSION_SECRET # signs the sessions
   - PASSWORD_HASH # the Argon2 hash of the first password, and of a reset, from make password-hash: never the password itself
   - PGPASSWORD # the database's password: PostgreSQL sets it at its first start, the app connects with it
+  # From the /aws folder (infisical.awsPath): the key of the scoped user cards-warehouse-app, the same Velero uses.
+  - AWS_ACCESS_KEY_ID # puts, deletes and signs the links of the photos
+  - AWS_SECRET_ACCESS_KEY
 
 # The same, but the pod starts without them: until make ebay-connect, the eBay page says "Non collegato" (docs/ebay.md).
 optionalSecrets:
@@ -28,6 +31,8 @@ infisical:
   projectSlug: cards-warehouse-g-ke-7
   environment: prod
   secretPath: /app
+  # The AWS key, kept apart since Velero reads it too (gitops/velero/credentials.yaml).
+  awsPath: /aws
   # How often the operator reads Infisical again: a changed value reaches the cluster within it.
   refreshInterval: 60s
   # The credential of the cluster's identity, which Terraform puts in the cluster (infra/platform).
@@ -63,6 +68,11 @@ resources:
     memory: 64Mi
   limits:
     memory: 128Mi
+
+# The private bucket of the item photos, from the foundations (infra/foundations): a name, not a secret.
+photos:
+  bucket: emmeonwork-cards-warehouse-photos
+  region: eu-north-1
 
 # The database the app and its migrations connect to, and as whom.
 database:

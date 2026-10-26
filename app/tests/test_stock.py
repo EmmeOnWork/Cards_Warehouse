@@ -120,5 +120,53 @@ def test_two_unloads_of_the_last_copy_at_once_take_it_only_once(database):
         assert stock.available(connection, item) == 0
 
 
+# The same boxes bought at 10,00 and at 12,00: a price made from 12,00 reaches the target margin on every copy.
+def test_the_cost_a_price_covers_is_the_highest_unit_cost_of_the_item(connection):
+    item = a_sealed(connection)
+    stock.load(connection, item, quantity=2, unit_cost_cents=1000)
+    stock.load(connection, item, quantity=1, unit_cost_cents=1200)
+
+    assert stock.cost_to_cover(connection, item) == 1200
+
+
+# The copies whose cost is not known may have cost more than the others: no cost is the honest answer.
+def test_the_cost_a_price_covers_is_not_known_when_a_lot_of_the_item_has_a_cost_not_known(connection):
+    item = a_sealed(connection)
+    stock.load(connection, item, quantity=2, unit_cost_cents=1000)
+    stock.load(connection, item, quantity=1, unit_cost_cents=None)
+
+    assert stock.cost_to_cover(connection, item) is None
+
+
+# A box lost, but two counted where there was one: an adjustment follows the same rule as a sale.
+def test_an_adjustment_that_would_take_a_lot_below_zero_is_refused_and_changes_nothing(connection):
+    item = a_sealed(connection)
+    lot = stock.load(connection, item, quantity=1, unit_cost_cents=8990)
+
+    with pytest.raises(NotEnoughStock):
+        stock.adjust(connection, lot, change=-2, cause=Cause.LOST)
+
+    assert stock.available(connection, item) == 1
+
+
+# The same boxes bought twice: the history numbers the lots of the item in the order they came, whatever the
+# other items hold, and tells how the quantity available was reached.
+def test_the_history_of_an_item_numbers_its_lots_and_adds_up_to_the_quantity_available(connection):
+    stock.load(connection, a_sealed(connection), quantity=4, unit_cost_cents=5000)
+    item = a_sealed(connection)
+    first = stock.load(connection, item, quantity=2, unit_cost_cents=8000)
+    stock.load(connection, item, quantity=3, unit_cost_cents=9500)
+    stock.adjust(connection, first, change=-1, cause=Cause.DAMAGED, note="Angolo schiacciato")
+
+    history = stock.history(connection, item)
+
+    assert [(movement.lot, movement.cause, movement.change, movement.note) for movement in history] == [
+        (1, Cause.LOAD, 2, ""),
+        (2, Cause.LOAD, 3, ""),
+        (1, Cause.DAMAGED, -1, "Angolo schiacciato"),
+    ]
+    assert sum(movement.change for movement in history) == stock.available(connection, item)
+
+
 def a_sealed(connection) -> int:
     return items.add(connection, Item(kind=Kind.SEALED, game="Pokémon", name="Booster box", language="it"))

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Modifica · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Modifica l'articolo</h1>
+  <p>Le copie non si cambiano da qui: passano dai <a href="/items/{{ item_id }}/movements">movimenti</a>.</p>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form class="load" method="post" action="/items/{{ item_id }}/edit">
+    {% include "item_fields.html" %}
+
+    <label for="location">Posizione, se vuoi</label>
+    <input id="location" name="location" placeholder="Scatola 3" value="{{ form.location }}">
+
+    <label for="notes">Note, se vuoi</label>
+    <textarea id="notes" name="notes" rows="3">{{ form.notes }}</textarea>
+
+    <button type="submit">Salva</button>
+  </form>
+  {% include "item_suggestions.html" %}
+{% endblock %}

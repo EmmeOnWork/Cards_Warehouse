@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Collaboratori · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Collaboratori</h1>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if partners %}
+    <table>
+      <thead>
+        <tr><th>Nome</th></tr>
+      </thead>
+      <tbody>
+        {% for partner in partners %}
+          <tr><td><a href="/partners/{{ partner.id }}">{{ partner.name }}</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Ancora nessun collaboratore: gli acquisti sono tutti tuoi.</p>
+  {% endif %}
+
+  <h2>Aggiungi un collaboratore</h2>
+  <form method="post" action="/partners">
+    <label for="name">Nome</label>
+    <input id="name" name="name" placeholder="Luca" value="{{ new.name }}" required>
+    <button type="submit">Aggiungi</button>
+  </form>
+{% endblock %}
