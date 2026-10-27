@@ -109,6 +109,14 @@ bash infra/platform/tests/backup.sh   # inside make shell, after aws login --rem
 
 It backs up by hand and checks the backup from Velero to the bucket and to the app's home page: see [backups](../../gitops/README.md#backups).
 
+The restore is a drill that destroys the platform, so it runs by hand, with the platform up:
+
+```sh
+bash infra/platform/tests/restore.sh [cycles]   # inside make shell, after aws login --remote; 3 cycles
+```
+
+Each cycle adds a photo to the item *Controllo del ripristino* through the app, backs up, destroys and creates the platform, runs `make restore` with an empty environment, and checks that the photo opens and that every table holds the rows it had before the backup. It prints one row of [measurements](../../docs/measurements/restore.md); the procedure is [docs/restore.md](../../docs/restore.md).
+
 One behaviour needs a commit, so it is checked by hand: add a manifest to `gitops/apps` (a namespace, for example), push it, and it appears in the cluster within about three minutes of the end of the pipeline; remove it, push, and it is deleted.
 
 ## Choices checked on 2026-10-15

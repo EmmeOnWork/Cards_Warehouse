@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Live · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Live</h1>
+  <form method="post" action="/lives">
+    <button type="submit">Nuovo inventario</button>
+  </form>
+
+  <h2>Inventari</h2>
+  {% if inventories %}
+    <table>
+      <thead>
+        <tr><th>Creato il</th><th class="number">Articoli</th></tr>
+      </thead>
+      <tbody>
+        {% for inventory in inventories %}
+          <tr>
+            <td><a href="/lives/{{ inventory.id }}">{{ inventory.created_at | day }}</a></td>
+            <td class="number">{{ inventory.items }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Ancora nessun inventario.</p>
+  {% endif %}
+
+  <h2>Configurazioni</h2>
+  {% if presets %}
+    {# A new inventory with the preset's items: changing it leaves the preset as it is. #}
+    <form method="post" action="/lives">
+      <ul>
+        {% for preset in presets %}
+          <li>
+            {{ preset.name }}
+            <button name="preset" value="{{ preset.id }}" aria-label="Parti da {{ preset.name }}">Parti da questa</button>
+          </li>
+        {% endfor %}
+      </ul>
+    </form>
+  {% else %}
+    <p>Ancora nessuna configurazione: salva un inventario per ripartire da quello alla prossima live.</p>
+  {% endif %}
+{% endblock %}

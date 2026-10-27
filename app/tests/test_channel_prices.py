@@ -19,12 +19,13 @@ BOOSTER_BOX = {
 }
 
 
-# The fees checked on 2026-10-25. On Vinted a listing is one copy, and closes when it is sold (tasks 20, 21, 22).
+# The fees checked on 2026-10-25, the limits of the titles on 2026-10-27. On Vinted a listing is one copy, and
+# closes when it is sold (tasks 20, 21, 22).
 def test_the_app_starts_with_vinted_tilt_and_ebay_and_their_fees(signed_in_client):
     assert table_rows(signed_in_client.get("/channels").text) == [
-        ["Vinted", "0 %", "no"],
-        ["Tilt", "2 % + 0,50 €", "sì"],
-        ["eBay", "0 %", "sì"],
+        ["Vinted", "0 %", "no", "nessun limite"],
+        ["Tilt", "2 % + 0,50 €", "sì", "nessun limite"],
+        ["eBay", "0 %", "sì", "80"],
     ]
 
 
@@ -57,7 +58,7 @@ def test_a_manual_channel_added_from_the_app_appears_in_the_prices_proposed(sign
     signed_in_client.post("/items", data=BOOSTER_BOX)
 
     assert _prices(signed_in_client, BOOSTER_BOX["name"])["Cardmarket"] == "126,32 €"
-    assert table_rows(signed_in_client.get("/channels").text)[-1] == ["Cardmarket", "5 %", "sì"]
+    assert table_rows(signed_in_client.get("/channels").text)[-1] == ["Cardmarket", "5 %", "sì", "nessun limite"]
 
 
 # One setting for every channel: at 30% the net is 130, and Tilt's 2% + 0,50 makes 130,50 / 0,98 = 133,163…
@@ -89,7 +90,12 @@ def test_a_fee_that_cannot_be_saved_is_refused_with_its_reason(signed_in_client,
 
     assert response.status_code == 422
     assert reason in html.unescape(response.text)
-    assert ["Tilt", "2 % + 0,50 €", "sì"] in table_rows(signed_in_client.get("/channels").text)
+    assert ["Tilt", "2 % + 0,50 €", "sì", "nessun limite"] in table_rows(signed_in_client.get("/channels").text)
+
+
+_TITLE_LIMIT_REFUSED = (
+    "I caratteri del titolo sono un numero da 1 in su, per esempio 80: vuoto se il canale non ha limite."
+)
 
 
 # Two channels with one name could not be told apart in the prices, nor later in the listings.
@@ -99,6 +105,8 @@ def test_a_fee_that_cannot_be_saved_is_refused_with_its_reason(signed_in_client,
         ({"name": " "}, "Scrivi il nome del canale."),
         ({"name": "Vinted"}, "Il canale Vinted c'è già."),
         ({"fee_percent": "100"}, "La commissione va da 0 a 99,99 %."),
+        ({"title_limit": "ottanta"}, _TITLE_LIMIT_REFUSED),
+        ({"title_limit": "0"}, _TITLE_LIMIT_REFUSED),
     ],
 )
 def test_a_new_channel_that_cannot_be_saved_is_refused_with_its_reason(signed_in_client, fields, reason):
@@ -126,4 +134,4 @@ def test_a_target_margin_that_is_not_a_percentage_is_refused_and_the_prices_stay
 def _prices(client, item_name: str) -> dict[str, str]:
     """The price proposed on each channel, as the item's page shows it."""
     item_page = links(client.get("/items").text)[item_name]
-    return dict(table_rows(client.get(item_page).text))
+    return {channel: price for channel, price, *_ in table_rows(client.get(item_page).text)}

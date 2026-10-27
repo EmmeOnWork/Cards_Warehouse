@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Inventario di live · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Inventario di live</h1>
+  {% if rows %}
+    <form method="post" action="/lives/{{ inventory_id }}/remove">
+      <table>
+        <thead>
+          <tr><th>Articolo</th><th class="number">Qtà</th><th class="number">Prezzo Tilt</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              {# Sold out since the preset was saved: taken off, or loaded again, before going live. #}
+              <td>{{ row.name }}{% if not row.available %} <span class="tag">esaurito</span>{% endif %}</td>
+              <td class="number">{{ row.available }}</td>
+              <td class="number">
+                {% if row.tilt_price_cents is none %}costo sconosciuto{% else %}{{ row.tilt_price_cents | euros }} €{% endif %}
+              </td>
+              <td><button name="item_id" value="{{ row.item_id }}" aria-label="Togli {{ row.name }}">Togli</button></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </form>
+  {% else %}
+    <p>Ancora nessun articolo: cercalo qui sotto e aggiungilo.</p>
+  {% endif %}
+
+  <h2>Aggiungi un articolo</h2>
+  <form method="get" action="/lives/{{ inventory_id }}">
+    <label for="q">Cerca nel nome</label>
+    <input id="q" name="q" type="search" value="{{ q }}" required>
+    <button type="submit">Cerca</button>
+  </form>
+  {% if q %}
+    {% if found %}
+      <form method="post" action="/lives/{{ inventory_id }}/items">
+        <ul>
+          {% for item in found %}
+            <li>
+              {{ item.name }} · {{ item.available }}
+              <button name="item_id" value="{{ item.id }}" aria-label="Aggiungi {{ item.name }}">Aggiungi</button>
+            </li>
+          {% endfor %}
+        </ul>
+      </form>
+    {% else %}
+      <p>Nessun articolo con «{{ q }}» nel nome.</p>
+    {% endif %}
+  {% endif %}
+
+  <h2>Salva come configurazione</h2>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/lives/{{ inventory_id }}/preset">
+    <label for="name">Nome</label>
+    <input id="name" name="name" placeholder="Live Pokémon del venerdì" value="{{ preset_name }}" required>
+    <button type="submit">Salva come configurazione</button>
+  </form>
+{% endblock %}

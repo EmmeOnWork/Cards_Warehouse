@@ -1,0 +1,10 @@
+{# The texts of the listings, as Manuel edits them: on the item's page, and again with what he typed when refused. #}
+<form method="post" action="/items/{{ item_id }}/texts">
+  <label for="listing_title">
+    Titolo{% if title_limit %}, al massimo {{ title_limit }} caratteri: il limite più stretto tra i canali{% endif %}
+  </label>
+  <input id="listing_title" name="listing_title" value="{{ typed.title }}" required>
+  <label for="listing_description">Descrizione</label>
+  <textarea id="listing_description" name="listing_description" rows="9" required>{{ typed.description }}</textarea>
+  <button type="submit">Salva i testi</button>
+</form>

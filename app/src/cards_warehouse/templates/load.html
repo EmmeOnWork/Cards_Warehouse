@@ -6,10 +6,48 @@
   <h1>Carica un articolo</h1>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <form class="load" method="post" action="/items">
+    {# Enter on the keyboard loads, as before pieces could be added: Enter presses the first button of a form. #}
+    <button type="submit" tabindex="-1" aria-hidden="true" style="position: absolute; left: -10000px">Carica</button>
+
+    {# The pieces of a purchase of several, added one at a time: nothing is saved until it is loaded. #}
+    {% if added %}
+      <h2>Pezzi dell'acquisto</h2>
+      <table>
+        <tbody>
+          {% for piece in added %}
+            <tr>
+              <td>
+                {{ piece.name }} × {{ piece.quantity }}
+                {% if piece.estimated_value %} · stimata {{ piece.estimated_value }} €{% endif %}
+              </td>
+              <td>
+                <button type="submit" name="remove_piece" value="{{ loop.index0 }}" formnovalidate
+                        aria-label="Togli {{ piece.name }}">Togli</button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% for piece in form.pieces %}<input type="hidden" name="pieces" value="{{ piece }}">{% endfor %}
+      <h2>Il pezzo che stai scrivendo</h2>
+    {% endif %}
+
     {% include "item_fields.html" %}
+
+    <label for="location">Posizione, se vuoi</label>
+    <input id="location" name="location" placeholder="Scatola 3" value="{{ form.location }}">
+
+    <label for="notes">Note, se vuoi</label>
+    <textarea id="notes" name="notes" rows="3">{{ form.notes }}</textarea>
 
     <label for="quantity">Copie</label>
     <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" value="{{ form.quantity }}" required>
+
+    {# Split in proportion to it, so that a card of 200 € does not cost as much as one of 2 €. #}
+    <label for="estimated_value">Valore stimato di una copia, in euro, se l'acquisto ha più pezzi</label>
+    <input id="estimated_value" name="estimated_value" inputmode="decimal" placeholder="200,00"
+           value="{{ form.estimated_value }}">
+    <button type="submit" name="add_piece" value="true">Aggiungi un altro pezzo</button>
 
     {# The cost of all the copies: the app splits it among them, with the shipping. #}
     <label for="total_cost">Costo totale, in euro</label>
@@ -47,12 +85,6 @@
         </tbody>
       </table>
     </details>
-
-    <label for="location">Posizione, se vuoi</label>
-    <input id="location" name="location" placeholder="Scatola 3" value="{{ form.location }}">
-
-    <label for="notes">Note, se vuoi</label>
-    <textarea id="notes" name="notes" rows="3">{{ form.notes }}</textarea>
 
     <button type="submit">Carica</button>
   </form>

@@ -37,6 +37,8 @@ class FeeForm(BaseModel):
 class NewChannelForm(FeeForm):
     name: str = ""
     multi_copy_listings: bool = False
+    # Empty for a channel that sets no limit.
+    title_limit: str = ""
 
 
 class TargetMarginForm(BaseModel):
@@ -59,8 +61,9 @@ def add_channel(request: Request, form: Annotated[NewChannelForm, Form()]):
         if not name:
             raise _Refused("Scrivi il nome del canale.")
         fee = _read_fee(form)
+        title_limit = _read_title_limit(form.title_limit)
         with request.app.state.engine.begin() as connection:
-            if channels.add(connection, name, fee, form.multi_copy_listings) is None:
+            if channels.add(connection, name, fee, form.multi_copy_listings, title_limit) is None:
                 raise _Refused(f"Il canale {name} c'è già.")
     except _Refused as refusal:
         return _channel_list(request, new_channel=form, error=str(refusal), status_code=422)
@@ -108,6 +111,20 @@ def _read_fee(form: FeeForm) -> FeeRule:
     except ValueError:
         raise _Refused("Scrivi la parte fissa in euro, con al massimo due decimali: per esempio 0,35.") from None
     return FeeRule(percent, fixed_cents)
+
+
+def _read_title_limit(text: str) -> int | None:
+    if not text.strip():
+        return None
+    try:
+        limit = int(text)
+    except ValueError:
+        limit = 0
+    if limit < 1:
+        raise _Refused(
+            "I caratteri del titolo sono un numero da 1 in su, per esempio 80: vuoto se il canale non ha limite."
+        )
+    return limit
 
 
 def _channel_list(

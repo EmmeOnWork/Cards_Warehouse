@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block title %}Testi non salvati · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Testi non salvati</h1>
+  <p class="error" role="alert">{{ reason }}</p>
+  {% include "item_texts.html" %}
+  <p><a href="/items/{{ item_id }}">Torna all'articolo</a> senza salvare.</p>
+{% endblock %}

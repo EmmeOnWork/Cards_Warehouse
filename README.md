@@ -32,6 +32,7 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 | `make platform-up` | Creates the kind cluster with Argo CD, which then applies [gitops/](gitops/): the app answers at <http://localhost:8000> |
 | `make platform-down` | Destroys the cluster, leaving the AWS foundations untouched |
 | `make backup` | Backs up the database now, the same as the daily backup, and waits for the outcome ([backups](gitops/README.md#backups)) |
+| `make restore` | Loads the app's data from the newest backup, or `BACKUP=<name>`: on a new cluster, after `make platform-up` ([how](docs/restore.md)) |
 | `make tailscale-up` | Starts the Tailscale node that brings the app to the phone away from home, and prints its address: the first time, a login link ([how](infra/tailscale/README.md)) |
 
 ## Secret protection

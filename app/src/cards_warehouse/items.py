@@ -1,10 +1,12 @@
 """Items: what a thing for sale is and how it looks. How many copies there are, and at what cost, is stock."""
 
+import unicodedata
 from dataclasses import dataclass
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 
-from sqlalchemy import Column, Connection, Integer, Numeric, Table, Text, func, insert, select
+from sqlalchemy import Column, Connection, Date, Integer, Numeric, Table, Text, func, insert, select
 from sqlalchemy.dialects import postgresql
 
 from cards_warehouse import stock
@@ -32,12 +34,56 @@ class Condition(StrEnum):
     POOR = "poor"
 
 
+# In English, as on Cardmarket and as buyers write them.
+CONDITIONS = {
+    Condition.MINT: "Mint",
+    Condition.NEAR_MINT: "Near Mint",
+    Condition.EXCELLENT: "Excellent",
+    Condition.GOOD: "Good",
+    Condition.LIGHT_PLAYED: "Light Played",
+    Condition.PLAYED: "Played",
+    Condition.POOR: "Poor",
+}
+
+# A choice from a list, as the PRD wants, but not data like the games: a new language is a line here, and its
+# short form in the titles of the listings.
+LANGUAGES = {
+    "it": "Italiano",
+    "en": "Inglese",
+    "ja": "Giapponese",
+    "fr": "Francese",
+    "de": "Tedesco",
+    "es": "Spagnolo",
+    "pt": "Portoghese",
+    "ko": "Coreano",
+    "zh": "Cinese",
+}
+
+
 @dataclass(frozen=True)
 class Grading:
     """A card graded and sealed in its slab by a grader, such as PSA: a grade from 1 to 10, in half points."""
 
     grader: str
     grade: Decimal
+
+
+def grade_text(grade: Decimal) -> str:
+    """9,5 as Manuel writes it, and 10 rather than 10,0."""
+    return f"{grade:.1f}".removesuffix(".0").replace(".", ",")
+
+
+def parse_grade(text: str) -> Decimal:
+    """A grade as a person types it, with a comma or a dot: "9,5" is 9.5. From 1 to 10, in half points, as eBay
+    asks it of a graded card."""
+    try:
+        grade = Decimal(text.strip().replace(",", "."))
+    except InvalidOperation:
+        raise ValueError(f"not a grade: {text!r}") from None
+    # A NaN cannot be compared: it is refused before.
+    if not grade.is_finite() or not 1 <= grade <= 10 or (grade * 2) % 1:
+        raise ValueError(f"a grade goes from 1 to 10 in half points, not {text!r}")
+    return grade
 
 
 @dataclass(frozen=True)
@@ -90,7 +136,20 @@ items = Table(
     Column("grader", Text),
     Column("grade", Numeric(3, 1)),
     Column("product_type", Text),
+    Column("fixed_price_cents", Integer),
+    Column("reference_price_cents", Integer),
+    Column("reference_price_on", Date),
+    Column("reference_price_source", Text),
 )
+
+
+@dataclass(frozen=True)
+class Reference:
+    """A price Manuel found in his market research, the day he found it, and where: what a fixed price is based on."""
+
+    price_cents: int
+    found_on: date
+    source: str
 
 
 @dataclass(frozen=True)
@@ -102,6 +161,7 @@ class Listed:
     available: int
     cost_unknown: bool
     details: Card | Sealed | None = None
+    notes: str = ""
 
 
 def find(connection: Connection, item_id: int) -> Listed | None:
@@ -125,9 +185,69 @@ def listing(connection: Connection, *where) -> list[Listed]:
         .order_by(items.c.id.desc())
     )
     return [
-        Listed(row.id, row.name, Kind(row.kind), row.game, row.available, row.cost_unknown, _details(row))
+        Listed(row.id, row.name, Kind(row.kind), row.game, row.available, row.cost_unknown, _details(row), row.notes)
         for row in rows
     ]
+
+
+# The condition of the filters that keeps the graded cards, which have a grade in its place.
+GRADED = "graded"
+
+
+@dataclass(frozen=True)
+class Filters:
+    """What the list of items is narrowed to: a filter left empty keeps every item. The items sold out are left out,
+    unless asked for."""
+
+    kind: str = ""
+    game: str = ""
+    language: str = ""
+    condition: str = ""
+    sold_out: bool = False
+
+
+# The list as it opens: every item with copies available.
+UNFILTERED = Filters()
+
+
+def search(connection: Connection, text: str, filters: Filters = UNFILTERED) -> list[Listed]:
+    """The items with each word of the text in their name, set, number or notes, in any case and with or without
+    accents, among those the filters keep. The words can be in different fields, and in any order."""
+    # PostgreSQL ignores accents only with the unaccent extension: for a few hundred items, Python does it.
+    words = _folded(text).split()
+    return [
+        item
+        for item in listing(connection, *_kept_by(filters))
+        if (item.available or filters.sold_out) and all(word in _searched(item) for word in words)
+    ]
+
+
+def _searched(item: Listed) -> str:
+    """The fields the search looks in, folded. One per line: a text is not found across two of them."""
+    fields = [item.name, item.notes]
+    if isinstance(item.details, Card | Sealed):
+        fields.append(item.details.set_name)
+    if isinstance(item.details, Card):
+        fields.append(item.details.number)
+    return _folded("\n".join(fields))
+
+
+def _folded(text: str) -> str:
+    """The text as the search compares it, without case and accents: "Pokémon" is "pokemon"."""
+    return "".join(char for char in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(char))
+
+
+def _kept_by(filters: Filters):
+    if filters.kind:
+        yield items.c.kind == filters.kind
+    if filters.game:
+        yield games.c.name == filters.game
+    if filters.language:
+        yield items.c.language == filters.language
+    if filters.condition == GRADED:
+        yield items.c.grade.is_not(None)
+    elif filters.condition:
+        yield items.c.condition == filters.condition
 
 
 def _details(row) -> Card | Sealed | None:
@@ -196,6 +316,37 @@ def get(connection: Connection, item_id: int) -> Item | None:
 def update(connection: Connection, item_id: int, item: Item) -> None:
     """The item's data, all of them, as `add` saves them. Its stock is not touched: copies change by movements."""
     connection.execute(items.update().values(_values(connection, item)).where(items.c.id == item_id))
+
+
+def fix_price(connection: Connection, item_id: int, cents: int | None) -> None:
+    """The price of the item on every channel, in place of the one made from the target. None takes it away."""
+    connection.execute(items.update().values(fixed_price_cents=cents).where(items.c.id == item_id))
+
+
+def fixed_price(connection: Connection, item_id: int) -> int | None:
+    return connection.execute(select(items.c.fixed_price_cents).where(items.c.id == item_id)).scalar_one_or_none()
+
+
+def note_reference(connection: Connection, item_id: int, reference: Reference) -> None:
+    """The reference price of the item, in place of the one noted before."""
+    connection.execute(
+        items.update()
+        .values(
+            reference_price_cents=reference.price_cents,
+            reference_price_on=reference.found_on,
+            reference_price_source=reference.source,
+        )
+        .where(items.c.id == item_id)
+    )
+
+
+def reference(connection: Connection, item_id: int) -> Reference | None:
+    row = connection.execute(
+        select(items.c.reference_price_cents, items.c.reference_price_on, items.c.reference_price_source).where(
+            items.c.id == item_id, items.c.reference_price_cents.is_not(None)
+        )
+    ).one_or_none()
+    return None if row is None else Reference(*row)
 
 
 def _values(connection: Connection, item: Item) -> dict:

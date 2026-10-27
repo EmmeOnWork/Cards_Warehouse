@@ -9,29 +9,47 @@
     <dt>Gioco</dt><dd>{{ item.game }}</dd>
     <dt>Copie disponibili</dt><dd>{{ item.available }}</dd>
   </dl>
-  <p><a href="/items/{{ item.id }}/edit">Modifica</a> · <a href="/items/{{ item.id }}/movements">Movimenti e rettifiche</a></p>
+  <p><a href="/items/{{ item.id }}/edit">Modifica</a> · <a href="/items/{{ item.id }}/movements">Movimenti e rettifiche</a>
+    {%- if item.kind == "sealed" %} · <a href="/items/{{ item.id }}/opening">Apri in buste</a>{% endif %}
+    {%- if gradable %} · <a href="/items/{{ item.id }}/grading">Manda a gradare</a>{% endif %}</p>
+
+  {% if at_grader %}
+    <section>
+      <h2>In gradazione</h2>
+      <ul>
+        {% for sent in at_grader %}
+          <li>Spedita a {{ sent.grader }} il {{ sent.sent_on.strftime("%d/%m/%Y") }} · <a href="/gradings/{{ sent.id }}">Tornata</a></li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if graded %}
+    <section>
+      <h2>Gradazione</h2>
+      <p>
+        {{ item.details.state | card_state }} · spedita il {{ graded.sent_on.strftime("%d/%m/%Y") }} ·
+        tornata il {{ graded.returned_on.strftime("%d/%m/%Y") }}
+      </p>
+      <p>
+        Costo della gradazione {{ graded.cost_cents | euros }} €, pagato da {{ graded.paid_by }} · quote
+        {% for person, percent in graded.shares %}{% if not loop.first %} · {% endif %}{{ person }} {{ percent }} %{% endfor %}
+      </p>
+    </section>
+  {% endif %}
 
   {% include "item_photos.html" %}
 
   <section>
-    <h2>Prezzi per canale</h2>
-    {% if proposal %}
-      <p>
-        Costo {{ proposal.cost_cents | euros }} € · obiettivo {{ proposal.margin_percent | percent }} % ·
-        netto obiettivo {{ proposal.net_cents | euros }} €
-      </p>
-      <table>
-        <thead>
-          <tr><th>Canale</th><th class="number">Prezzo proposto</th></tr>
-        </thead>
-        <tbody>
-          {% for channel, price in proposal.prices %}
-            <tr><td>{{ channel }}</td><td class="number">{{ price | euros }} €</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <p>Costo sconosciuto: l'app non propone prezzi. Il prezzo che lascia il margine obiettivo parte dal costo.</p>
+    <h2>Testi dell'annuncio</h2>
+    {% if texts.edited %}
+      <form method="post" action="/items/{{ item.id }}/texts/regenerate">
+        <p>Modificati a mano: non seguono più i campi dell'articolo.</p>
+        <button type="submit">Rigenera dai campi</button>
+      </form>
     {% endif %}
+    {% with item_id=item.id, typed=texts.texts, title_limit=texts.title_limit %}{% include "item_texts.html" %}{% endwith %}
   </section>
+
+  {% include "item_prices.html" %}
 {% endblock %}

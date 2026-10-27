@@ -19,6 +19,13 @@
             <td>{{ movement.at | day }}</td>
             <td>
               {{ causes[movement.cause] }}
+              {% set counterpart = counterparts.get(movement.id) %}
+              {% if counterpart %}
+                <br><small>
+                  {% if movement.change < 0 %}In {{ counterpart.copies }} buste:{% else %}Da{% endif %}
+                  <a href="/items/{{ counterpart.item_id }}">{{ counterpart.name }}</a>
+                </small>
+              {% endif %}
               {% if movement.note %}<br><small>{{ movement.note }}</small>{% endif %}
             </td>
             <td>{{ movement.lot }}</td>
@@ -33,15 +40,7 @@
     <h2>Rettifica</h2>
     {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
     <form method="post" action="/items/{{ item.id }}/movements">
-      <label for="lot">Lotto</label>
-      <select id="lot" name="lot">
-        {% for lot in lots %}
-          <option value="{{ lot.number }}"{% if form.lot == lot.number | string %} selected{% endif %}>
-            Lotto {{ lot.number }} · {{ lot.available | copies }} ·
-            {% if lot.unit_cost_cents is none %}costo sconosciuto{% else %}{{ lot.unit_cost_cents | euros }} €{% endif %}
-          </option>
-        {% endfor %}
-      </select>
+      {% include "lot_choice.html" %}
 
       <label for="cause">Causa</label>
       <select id="cause" name="cause">

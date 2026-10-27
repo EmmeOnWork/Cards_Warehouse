@@ -3,6 +3,48 @@
 {% block content %}
   <h1>Articoli</h1>
   <p><a class="button" href="/items/new">Carica un articolo</a></p>
+  {# In the address, not in a session: back from an item, the list is filtered as it was. #}
+  <form method="get" action="/items">
+    <input type="search" name="q" value="{{ q }}" aria-label="Cerca" placeholder="Nome, set, numero o note"
+           enterkeyhint="search">
+    {# Closed while no filter is on, so that the list starts on the first screen of the phone. #}
+    <details {% if filtered %}open{% endif %}>
+      <summary>Filtri</summary>
+      <label for="kind">Tipo</label>
+      <select id="kind" name="kind">
+        <option value="">Tutti i tipi</option>
+        {% for value, label in kinds.items() %}
+          <option value="{{ value }}" {% if filters.kind == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <label for="game">Gioco</label>
+      <select id="game" name="game">
+        <option value="">Tutti i giochi</option>
+        {% for game in games %}
+          <option {% if filters.game == game %}selected{% endif %}>{{ game }}</option>
+        {% endfor %}
+      </select>
+      <label for="language">Lingua</label>
+      <select id="language" name="language">
+        <option value="">Tutte le lingue</option>
+        {% for value, label in languages.items() %}
+          <option value="{{ value }}" {% if filters.language == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <label for="condition">Condizione</label>
+      <select id="condition" name="condition">
+        <option value="">Tutte le condizioni</option>
+        {% for value, label in conditions.items() %}
+          <option value="{{ value }}" {% if filters.condition == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+        <option value="{{ graded }}" {% if filters.condition == graded %}selected{% endif %}>Gradata</option>
+      </select>
+      <label class="check">
+        <input type="checkbox" name="sold_out" {% if filters.sold_out %}checked{% endif %}> Mostra anche gli esauriti
+      </label>
+    </details>
+    <p><button type="submit">Cerca</button></p>
+  </form>
   {% if listed %}
     <table>
       <thead>
@@ -25,6 +67,7 @@
       </tbody>
     </table>
   {% else %}
-    <p>Ancora nessun articolo.</p>
+    {# Not "no items yet": the items sold out are hidden, and the search may be too narrow. #}
+    <p>Nessun articolo trovato.</p>
   {% endif %}
 {% endblock %}

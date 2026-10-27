@@ -17,17 +17,22 @@
         {% for purchase in purchases %}
           <tr>
             <td>
-              {{ purchase.purchased_on.strftime("%d/%m/%Y") }}<br>
-              {{ purchase.lots[0].item }} × {{ purchase.lots | sum(attribute="copies") }}
+              {{ purchase.purchased_on.strftime("%d/%m/%Y") }}
+              {# Each item on its page, where its photos are added. #}
+              {% for item in purchase.items %}
+                <br><a href="/items/{{ item.id }}">{{ item.name }}</a> × {{ item.copies }}
+              {% endfor %}
               {% if purchase.note %}<br>{{ purchase.note }}{% endif %}
             </td>
             <td>
               {{ purchase.total_cost_cents | euros }} €
               {% if purchase.shipping_cents %} + spedizione {{ purchase.shipping_cents | euros }} €{% endif %}
-              {# What the app made of it: the cost of each copy, the cents left over on the first ones. #}
+              {# What the app made of it: the cost of each copy, the cents left over on the first ones. In a mixed
+                 purchase, of each item, as its estimated value made it. #}
               <br>per copia
+              {% set mixed = purchase.items | length > 1 %}
               {% for lot in purchase.lots %}
-                <br>{{ lot.unit_cost_cents | euros }} € × {{ lot.copies }}
+                <br>{% if mixed %}{{ lot.item }} {% endif %}{{ lot.unit_cost_cents | euros }} € × {{ lot.copies }}
               {% endfor %}
             </td>
             <td>

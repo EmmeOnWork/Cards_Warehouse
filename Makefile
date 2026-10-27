@@ -2,7 +2,7 @@
 TOOLBOX := docker compose -f infra/toolbox/compose.yaml run --rm --build toolbox
 APP_DEV := docker compose -f app/compose.yaml run --rm --build dev
 
-.PHONY: shell tf-check chart-check platform-up platform-down backup tailscale-up app-shell lint test password-hash ebay-connect scan hooks
+.PHONY: shell tf-check chart-check platform-up platform-down backup restore tailscale-up app-shell lint test password-hash ebay-connect scan hooks
 
 shell: ## Open a shell with terraform, the AWS CLI, kubectl, Helm and Velero
 	$(TOOLBOX) bash
@@ -32,6 +32,10 @@ platform-down: ## Destroy the cluster; the AWS foundations are not touched
 # Named by Velero after the schedule and the time: velero-daily-<YYYYMMDDhhmmss>.
 backup: ## Back up now, the same as the daily backup, and wait for its outcome (platform up)
 	$(TOOLBOX) velero backup create --from-schedule velero-daily --wait
+
+# On a new cluster, after make platform-up: docs/restore.md. Needs no aws login.
+restore: ## Load the app's data from a backup (platform up): the newest that completed, or BACKUP=<name>
+	$(TOOLBOX) bash infra/platform/restore.sh $(BACKUP)
 
 # Waits up to 30 s for the node to reach Tailscale: then either it is in, or it has a login link.
 tailscale-up: ## Start the Tailscale node that brings the app to the phone, and print its address: the first time, a login link

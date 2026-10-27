@@ -1,0 +1,59 @@
+{# The prices section of the item's page (item.html): the price on each channel, the margin it leaves, and what
+   Manuel based it on. #}
+<section>
+  <h2>Prezzi per canale</h2>
+  {% set fixed = proposal.fixed_price_cents if proposal else none %}
+  {% if proposal %}
+    <p>
+      {% if proposal.cost_cents is none %}
+        Costo sconosciuto: il margine non è calcolabile.
+      {% else %}
+        Costo {{ proposal.cost_cents | euros }} € · obiettivo {{ proposal.margin_percent | percent }} % ·
+        netto obiettivo {{ proposal.net_cents | euros }} €
+      {% endif %}
+      {% if fixed %}<br>Prezzo fissato da te, uguale su tutti i canali.{% endif %}
+    </p>
+    <table>
+      <thead>
+        <tr><th>Canale</th><th class="number">Prezzo</th><th class="number" colspan="2">Margine</th></tr>
+      </thead>
+      <tbody>
+        {% for row in proposal.per_channel %}
+          <tr>
+            <td>{{ row.channel }}</td>
+            <td class="number">{{ row.price_cents | euros }} €</td>
+            {% if row.margin is none %}
+              <td class="number" colspan="2">non calcolabile</td>
+            {% else %}
+              <td class="number">{{ row.margin.cents | euros }} €</td>
+              <td class="number">
+                {{ row.margin.percent | percent }} %
+                {% if row.warning %}
+                  {% set label, style = margin_warnings[row.warning] %}
+                  <br><span class="{{ style }}">{{ label }}</span>
+                {% endif %}
+              </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Costo sconosciuto: l'app non propone prezzi. Il prezzo che lascia il margine obiettivo parte dal costo.</p>
+  {% endif %}
+
+  {% with item_id=item.id, typed={"fixed_price": fixed | euros if fixed else ""} %}{% include "fixed_price_form.html" %}{% endwith %}
+  {% if fixed %}
+    <form method="post" action="/items/{{ item.id }}/fixed-price/delete">
+      <button type="submit">Togli il prezzo fissato</button>
+    </form>
+  {% endif %}
+
+  <h3>Prezzo di riferimento</h3>
+  {% if reference %}
+    <p>Prezzo di riferimento: {{ reference.price_cents | euros }} € il {{ reference.found_on.strftime("%d/%m/%Y") }}, da {{ reference.source }}</p>
+  {% else %}
+    <p>Nessun prezzo di riferimento: annota quello che trovi nella ricerca di mercato.</p>
+  {% endif %}
+  {% with item_id=item.id, typed=new_reference() %}{% include "reference_price_form.html" %}{% endwith %}
+</section>

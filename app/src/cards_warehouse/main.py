@@ -14,11 +14,16 @@ from cards_warehouse import (
     backups,
     channel_pages,
     ebay,
+    grading_pages,
     item_pages,
+    listing_text_pages,
+    live_pages,
     movement_pages,
+    opening_pages,
     pages,
     photo_pages,
     photos,
+    price_pages,
     purchase_pages,
 )
 from cards_warehouse.database import create_database_engine
@@ -80,7 +85,12 @@ def create_app(
     app.include_router(channel_pages.router)
     app.include_router(photo_pages.router)
     app.include_router(movement_pages.router)
+    app.include_router(listing_text_pages.router)
+    app.include_router(price_pages.router)
+    app.include_router(opening_pages.router)
+    app.include_router(grading_pages.router)
     app.include_router(purchase_pages.router)
+    app.include_router(live_pages.router)
     access.protect(
         app,
         stored_password=StoredPassword(engine, infisical_hash=password_hash),

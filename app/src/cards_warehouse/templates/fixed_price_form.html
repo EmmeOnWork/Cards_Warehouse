@@ -1,0 +1,6 @@
+{# The field of the fixed price: on the item's page, and again on the page that says why it was not saved. #}
+<form method="post" action="/items/{{ item_id }}/fixed-price">
+  <label for="fixed_price">Prezzo fissato, uguale su tutti i canali</label>
+  <input id="fixed_price" name="fixed_price" inputmode="decimal" placeholder="125,00" value="{{ typed.fixed_price }}" required>
+  <button type="submit">Fissa il prezzo</button>
+</form>

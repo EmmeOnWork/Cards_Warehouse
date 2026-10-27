@@ -2,12 +2,14 @@
 
 A purchase of identical copies splits its cost, shipping included, in equal parts among them. The parts differ by
 a cent at most and a lot is copies at one unit cost, so the copies that take a cent more make a lot of their own.
-The shares are set on the purchase, once: every lot it makes carries them.
+A mixed purchase splits it in proportion to what each piece is estimated to be worth, and makes the lots of each
+item the same way. The shares are set on the purchase, once: every lot it makes carries them.
 """
 
 from dataclasses import dataclass
 from datetime import date
 from itertools import groupby
+from operator import attrgetter
 from typing import NamedTuple
 
 from sqlalchemy import Column, Connection, Date, Integer, Table, Text, func, insert, select
@@ -76,16 +78,33 @@ class Purchase:
     shares: tuple[Share, ...] = ()
 
 
+@dataclass(frozen=True)
+class Piece:
+    """Copies of an item in a mixed purchase, and what one of them is estimated to be worth: at least a cent."""
+
+    item_id: int
+    quantity: int
+    estimated_value_cents: int
+
+
 def record(connection: Connection, purchase: Purchase, item_id: int, quantity: int) -> int:
     """The purchase of identical copies of the item, loaded in the lots it makes. Without shares it is all
     Manuel's, and he paid it all."""
+    # Copies of the same value: whatever it is, they split the cost in equal parts.
+    return record_mixed(connection, purchase, [Piece(item_id, quantity, estimated_value_cents=1)])
+
+
+def record_mixed(connection: Connection, purchase: Purchase, pieces: list[Piece]) -> int:
+    """The purchase of pieces of different items, or of the same worth differently: each copy costs a part of it
+    in proportion to what it is estimated to be worth, so a card of 200 € does not cost as much as one of 2 €."""
     due = purchase.total_cost_cents + purchase.shipping_cents
     shares = purchase.shares or (Share(None, 100, due),)
     if (percent := sum(share.percent for share in shares)) != 100:
         raise SharesNotWhole(percent)
     if (paid := sum(share.paid_cents for share in shares)) != due:
         raise PaymentsNotTotal(paid, due)
-    unit_costs = cost_split.equal_parts(due, quantity)
+    copies = [piece.estimated_value_cents for piece in pieces for _ in range(piece.quantity)]
+    unit_costs = iter(cost_split.in_proportion(due, copies))
     purchase_id = connection.execute(
         insert(purchases)
         .values(
@@ -103,29 +122,50 @@ def record(connection: Connection, purchase: Purchase, item_id: int, quantity: i
             for s in shares
         ],
     )
-    # The dearer copies first: the first lot is the one a sale takes from when Manuel does not choose.
-    for unit_cost, copies in groupby(unit_costs):
-        stock.load(connection, item_id, len(list(copies)), unit_cost, purchase_id=purchase_id)
+    for piece in pieces:
+        costs = [next(unit_costs) for _ in range(piece.quantity)]
+        stock.load_split(connection, piece.item_id, sorted(costs, reverse=True), purchase_id=purchase_id)
     return purchase_id
 
 
 def shares_of_lot(connection: Connection, lot_id: int) -> dict[int | None, int]:
     """The percent each person has of the lot, by partner: Manuel is None. The shares of the purchase it came from,
     or all Manuel's for a lot without one."""
-    lots = stock.of_lots()
+    lots = stock.stock_lots
     rows = connection.execute(
         select(purchase_shares.c.partner_id, purchase_shares.c.percent)
         .join_from(lots, purchase_shares, purchase_shares.c.purchase_id == lots.c.purchase_id)
-        .where(lots.c.lot_id == lot_id)
+        .where(lots.c.id == lot_id)
     )
     return {partner_id: percent for partner_id, percent in rows} or {None: 100}
 
 
+def people_of_lot(connection: Connection, lot_id: int) -> list[tuple[str, int]]:
+    """The shares of the lot as a person reads them: the name and the percent, Manuel first, then the partners by
+    name."""
+    lots = stock.stock_lots
+    rows = connection.execute(
+        select(func.coalesce(partners.c.name, MANUEL), purchase_shares.c.percent)
+        .join_from(lots, purchase_shares, purchase_shares.c.purchase_id == lots.c.purchase_id)
+        .outerjoin(partners, partners.c.id == purchase_shares.c.partner_id)
+        .where(lots.c.id == lot_id)
+        .order_by(partners.c.name.nulls_first())
+    )
+    return [(person, percent) for person, percent in rows] or [(MANUEL, 100)]
+
+
 @dataclass(frozen=True)
 class PurchasedLot:
+    item_id: int
     item: str
     copies: int
     unit_cost_cents: int
+
+
+class PurchasedItem(NamedTuple):
+    id: int
+    name: str
+    copies: int
 
 
 class ListedShare(NamedTuple):
@@ -145,6 +185,15 @@ class Listed:
     # Manuel first, then the partners by name.
     shares: tuple[ListedShare, ...]
 
+    @property
+    def items(self) -> list[PurchasedItem]:
+        """The items bought, in the order they were loaded, with their copies: one, for identical copies."""
+        bought = []
+        for item_id, group in groupby(self.lots, key=attrgetter("item_id")):
+            lots = list(group)
+            bought.append(PurchasedItem(item_id, lots[0].item, sum(lot.copies for lot in lots)))
+        return bought
+
 
 def listing(connection: Connection) -> list[Listed]:
     """Every purchase with the lots it made and its shares, the last bought first."""
@@ -163,14 +212,14 @@ def listing(connection: Connection) -> list[Listed]:
         shares_of.setdefault(purchase_id, []).append(ListedShare(person, percent, paid))
     lots = stock.of_lots()
     lot_rows = connection.execute(
-        select(lots.c.purchase_id, items.items.c.name, lots.c.loaded, lots.c.unit_cost_cents)
+        select(lots.c.purchase_id, lots.c.item_id, items.items.c.name, lots.c.loaded, lots.c.unit_cost_cents)
         .join_from(lots, items.items, items.items.c.id == lots.c.item_id)
         .where(lots.c.purchase_id.is_not(None))
         .order_by(lots.c.lot_id)
     )
     lots_of: dict[int, list[PurchasedLot]] = {}
-    for purchase_id, item, copies, unit_cost in lot_rows:
-        lots_of.setdefault(purchase_id, []).append(PurchasedLot(item, copies, unit_cost))
+    for purchase_id, item_id, item, copies, unit_cost in lot_rows:
+        lots_of.setdefault(purchase_id, []).append(PurchasedLot(item_id, item, copies, unit_cost))
     rows = connection.execute(select(purchases).order_by(purchases.c.purchased_on.desc(), purchases.c.id.desc()))
     return [
         Listed(

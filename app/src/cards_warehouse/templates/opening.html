@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Apri in buste · {{ item.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ item.name }}</h1>
+  <p><a href="/items/{{ item.id }}">Torna all'articolo</a></p>
+
+  <section>
+    <h2>Apri in buste</h2>
+    <p>Una copia esce dal lotto. Il suo costo si divide in parti uguali tra le buste, che hanno le sue stesse quote.</p>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/items/{{ item.id }}/opening">
+      {% include "lot_choice.html" %}
+
+      <label for="packs">Buste</label>
+      <input id="packs" name="packs" type="number" inputmode="numeric" min="1" placeholder="36" value="{{ form.packs }}" required>
+
+      <label for="pack">Busta</label>
+      <select id="pack" name="pack">
+        <option value="">Un articolo nuovo</option>
+        {% for pack in packs %}
+          <option value="{{ pack.id }}"{% if form.pack == pack.id | string %} selected{% endif %}>{{ pack.name }}</option>
+        {% endfor %}
+      </select>
+      <label for="pack_name">Nome della busta nuova: gioco, lingua e set sono quelli del box</label>
+      <input id="pack_name" name="pack_name" placeholder="Busta Evoluzioni a Paldea" value="{{ form.pack_name }}">
+
+      <button type="submit">Apri una copia</button>
+    </form>
+  </section>
+{% endblock %}

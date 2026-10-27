@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Tornata dalla gradazione · {{ sent.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ sent.name }}</h1>
+  <p><a href="/items/{{ sent.item_id }}">Torna all'articolo</a></p>
+
+  <section>
+    <h2>Tornata dalla gradazione</h2>
+    <p>
+      Spedita a {{ sent.grader }} il {{ sent.sent_on.strftime("%d/%m/%Y") }} · costo {{ sent.cost_cents | euros }} €,
+      pagato da {{ sent.paid_by }}
+    </p>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/gradings/{{ sent.id }}">
+      <label for="grade">Voto, da 1 a 10</label>
+      <input id="grade" name="grade" inputmode="decimal" placeholder="9,5" value="{{ form.grade }}" required>
+
+      <label for="returned_on">Data del ritorno</label>
+      <input id="returned_on" name="returned_on" type="date" value="{{ form.returned_on }}">
+
+      <button type="submit">Registra il ritorno</button>
+    </form>
+  </section>
+{% endblock %}

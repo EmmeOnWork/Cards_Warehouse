@@ -10,7 +10,7 @@ import pytest
 
 from cards_warehouse import items, partners, purchases, stock
 from cards_warehouse.items import Item, Kind
-from cards_warehouse.purchases import PaymentsNotTotal, Purchase, Share, SharesNotWhole
+from cards_warehouse.purchases import PaymentsNotTotal, Piece, Purchase, Share, SharesNotWhole
 
 BOXES = Purchase(total_cost_cents=10000, shipping_cents=400, purchased_on=date(2026, 10, 20))
 
@@ -98,6 +98,54 @@ def test_a_lot_without_a_purchase_is_all_manuels(connection, unit_cost_cents):
     lot = stock.load(connection, a_sealed(connection), quantity=2, unit_cost_cents=unit_cost_cents)
 
     assert purchases.shares_of_lot(connection, lot) == {None: 100}
+
+
+CARDS = Purchase(total_cost_cents=10000, shipping_cents=0, purchased_on=date(2026, 10, 20))
+
+
+# Three Charizard estimated 200 € each and a Pikachu estimated 2 €, for 100 €: 33,22… € a Charizard and 0,33 € the
+# Pikachu. A Charizard takes the cent left over, in a lot of its own, and the lots add up to 100 € again.
+def test_a_mixed_purchase_splits_its_cost_by_the_estimated_values_in_lots_that_add_up_to_it(connection):
+    charizard, pikachu = a_card(connection, "Charizard ex"), a_card(connection, "Pikachu")
+
+    purchases.record_mixed(connection, CARDS, [Piece(charizard, 3, 20000), Piece(pikachu, 1, 200)])
+
+    (purchase,) = purchases.listing(connection)
+    assert [(lot.item, lot.unit_cost_cents, lot.copies) for lot in purchase.lots] == [
+        ("Charizard ex", 3323, 1),
+        ("Charizard ex", 3322, 2),
+        ("Pikachu", 33, 1),
+    ]
+    assert sum(lot.unit_cost_cents * lot.copies for lot in purchase.lots) == 10000
+
+
+def test_every_lot_of_a_mixed_purchase_carries_its_shares(connection):
+    luca = partners.add(connection, "Luca")
+    charizard, pikachu = a_card(connection, "Charizard ex"), a_card(connection, "Pikachu")
+    shared = replace(CARDS, shares=(Share(None, 50, 10000), Share(luca, 50, 0)))
+
+    purchases.record_mixed(connection, shared, [Piece(charizard, 3, 20000), Piece(pikachu, 1, 200)])
+
+    lots = stock.lots(connection, charizard) + stock.lots(connection, pikachu)
+    assert [purchases.shares_of_lot(connection, lot.id) for lot in lots] == [{None: 50, luca: 50}] * 3
+
+
+# A piece estimated at nothing would cost nothing, and its margin in percent could not be worked out.
+@pytest.mark.parametrize("estimated_value_cents", [0, -100])
+def test_a_piece_estimated_below_a_cent_is_refused_and_nothing_is_loaded(connection, estimated_value_cents):
+    charizard, pikachu = a_card(connection, "Charizard ex"), a_card(connection, "Pikachu")
+
+    with pytest.raises(ValueError, match="estimated"):
+        purchases.record_mixed(
+            connection, CARDS, [Piece(charizard, 1, 20000), Piece(pikachu, 1, estimated_value_cents)]
+        )
+
+    assert purchases.listing(connection) == []
+    assert stock.available(connection, charizard) == stock.available(connection, pikachu) == 0
+
+
+def a_card(connection, name: str) -> int:
+    return items.add(connection, Item(kind=Kind.SINGLE_CARD, game="Pokémon", name=name, language="it"))
 
 
 def a_sealed(connection) -> int:

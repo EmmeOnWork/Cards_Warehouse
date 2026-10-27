@@ -6,7 +6,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from cards_warehouse import items, stock
+from cards_warehouse import items, openings, stock
 from cards_warehouse.backups import LOCAL_TIME
 from cards_warehouse.pages import templates
 from cards_warehouse.stock import Cause
@@ -20,6 +20,9 @@ templates.env.globals["causes"] = {
     Cause.DAMAGED: "Danneggiato",
     Cause.GIVEN_AWAY: "Regalato",
     Cause.MISCOUNT: "Errore di conteggio",
+    Cause.OPENING: "Apertura",
+    Cause.SENT_FOR_GRADING: "Spedita a gradare",
+    Cause.GRADED: "Tornata gradata",
 }
 # The choices of an adjustment: its cause, and which way it changes the lot. The number pad of a phone often has
 # no minus sign, so the way is in the choice and the copies are always at least 1.
@@ -103,10 +106,12 @@ def _page(request: Request, item_id: int, form: AdjustmentForm, error: str = "",
         if item is None:
             raise HTTPException(status_code=404)
         history = stock.history(connection, item_id)
+        # What each opening in the history came from, or went into.
+        counterparts = openings.counterparts(connection, item_id)
         lots = stock.lots(connection, item_id)
     return templates.TemplateResponse(
         request,
         "movements.html",
-        {"item": item, "history": history, "lots": lots, "form": form, "error": error},
+        {"item": item, "history": history, "counterparts": counterparts, "lots": lots, "form": form, "error": error},
         status_code=status_code,
     )

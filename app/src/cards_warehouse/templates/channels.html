@@ -14,7 +14,7 @@
 
   <table>
     <thead>
-      <tr><th>Canale</th><th>Commissione</th><th>Più copie per annuncio</th></tr>
+      <tr><th>Canale</th><th>Commissione</th><th>Più copie per annuncio</th><th class="number">Caratteri del titolo</th></tr>
     </thead>
     <tbody>
       {% for channel in channels %}
@@ -22,6 +22,7 @@
           <td><a href="/channels/{{ channel.id }}">{{ channel.name }}</a></td>
           <td>{{ channel.fee | fee }}</td>
           <td>{{ "sì" if channel.multi_copy_listings else "no" }}</td>
+          <td class="number">{{ channel.title_limit or "nessun limite" }}</td>
         </tr>
       {% endfor %}
     </tbody>
@@ -40,6 +41,9 @@
       <input type="checkbox" name="multi_copy_listings"{% if new_channel.multi_copy_listings %} checked{% endif %}>
       Un annuncio può offrire più copie
     </label>
+    {# The same title goes on every channel: it is made to fit the tightest. #}
+    <label for="title_limit">Caratteri del titolo, al massimo: vuoto se il canale non ha un limite</label>
+    <input id="title_limit" name="title_limit" inputmode="numeric" value="{{ new_channel.title_limit }}">
     <button type="submit">Aggiungi</button>
   </form>
 {% endblock %}

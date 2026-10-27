@@ -1,0 +1,12 @@
+{# The fields of the reference price: on the item's page, and again on the page that says why it was not saved. #}
+<form method="post" action="/items/{{ item_id }}/reference-price">
+  <label for="reference_price">Prezzo di riferimento trovato</label>
+  <input id="reference_price" name="reference_price" inputmode="decimal" placeholder="118,50"
+         value="{{ typed.reference_price }}" required>
+  <label for="reference_on">Il giorno</label>
+  <input id="reference_on" name="reference_on" type="date" value="{{ typed.reference_on }}" required>
+  <label for="reference_source">Dove</label>
+  <input id="reference_source" name="reference_source" placeholder="Cardmarket, prezzo di tendenza"
+         value="{{ typed.reference_source }}" required>
+  <button type="submit">Salva il riferimento</button>
+</form>

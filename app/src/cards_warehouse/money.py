@@ -18,8 +18,10 @@ def parse_euros(text: str) -> int:
 
 
 def format_euros(cents: int) -> str:
-    """An amount as a person reads it, and as parse_euros reads it back: 1999 is "19,99"."""
-    return f"{cents // 100},{cents % 100:02d}"
+    """An amount as a person reads it, and as parse_euros reads it back: 1999 is "19,99". A loss, never typed but
+    shown, has a minus: -250 is "-2,50"."""
+    sign = "-" if cents < 0 else ""
+    return f"{sign}{abs(cents) // 100},{abs(cents) % 100:02d}"
 
 
 # Up to 999,99%, as the database keeps it: a fee stays below 100, a target margin can be above it.

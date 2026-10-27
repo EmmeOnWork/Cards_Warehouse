@@ -7,6 +7,7 @@ with its cause, and the quantity available is the sum of the movements: it never
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from itertools import groupby
 
 from sqlalchemy import Column, Connection, DateTime, Integer, Subquery, Table, Text, func, insert, select
 
@@ -23,6 +24,12 @@ class Cause(StrEnum):
     DAMAGED = "damaged"
     GIVEN_AWAY = "given_away"
     MISCOUNT = "miscount"
+    # A copy opened, such as a box into packs: it leaves its lot, and what was inside comes in as new lots.
+    OPENING = "opening"
+    # A card sent to a grader, such as PSA: it leaves its lot for the months the grading takes.
+    SENT_FOR_GRADING = "sent_for_grading"
+    # Back from the grader with its grade: a lot of its own, in an item graded.
+    GRADED = "graded"
 
 
 class NotEnoughStock(Exception):
@@ -47,6 +54,8 @@ stock_movements = Table(
     Column("cause", Text),
     Column("note", Text),
     Column("created_at", DateTime(timezone=True)),
+    # On the copies that came out of an opening: the movement that took the copy opened.
+    Column("opening_id", Integer),
 )
 
 # The quantity of whatever movements a query picks.
@@ -54,11 +63,19 @@ _quantity = func.coalesce(func.sum(stock_movements.c.change), 0)
 
 
 def load(
-    connection: Connection, item_id: int, quantity: int, unit_cost_cents: int | None, purchase_id: int | None = None
+    connection: Connection,
+    item_id: int,
+    quantity: int,
+    unit_cost_cents: int | None,
+    purchase_id: int | None = None,
+    opening_id: int | None = None,
+    cause: Cause | None = None,
 ) -> int:
     """A new lot of the item, with its copies loaded. A unit cost of None is a cost not known.
 
-    The purchase the lot comes from, if any: a lot without one is all Manuel's."""
+    The purchase the lot comes from, if any, directly or through the openings that made it: a lot without one is
+    all Manuel's. The movement of the opening the copies came out of, if any: theirs is then an opening too.
+    The cause of their movement, when they come from neither: a card back from its grading."""
     _check_quantity(quantity)
     if unit_cost_cents is not None and unit_cost_cents < 1:
         raise ValueError("a known cost is at least 1 cent: a cost not known is None, not zero")
@@ -67,8 +84,26 @@ def load(
         .values(item_id=item_id, unit_cost_cents=unit_cost_cents, purchase_id=purchase_id)
         .returning(stock_lots.c.id)
     ).scalar_one()
-    connection.execute(insert(stock_movements).values(lot_id=lot_id, change=quantity, cause=Cause.LOAD))
+    if cause is None:
+        cause = Cause.LOAD if opening_id is None else Cause.OPENING
+    connection.execute(
+        insert(stock_movements).values(lot_id=lot_id, change=quantity, cause=cause, opening_id=opening_id)
+    )
     return lot_id
+
+
+def load_split(
+    connection: Connection,
+    item_id: int,
+    unit_costs: list[int | None],
+    purchase_id: int | None = None,
+    opening_id: int | None = None,
+) -> None:
+    """Copies whose costs come from a split, one for each, in a lot for each unit cost: a lot, or two when the
+    split left cents over. In the order of the split, the dearer first: the first lot is the one a sale takes from
+    when Manuel does not choose. Costs all None, not known, make one lot."""
+    for unit_cost, copies in groupby(unit_costs):
+        load(connection, item_id, len(list(copies)), unit_cost, purchase_id=purchase_id, opening_id=opening_id)
 
 
 def unload(connection: Connection, lot_id: int, quantity: int, cause: Cause) -> int:
@@ -84,6 +119,7 @@ def adjust(connection: Connection, lot_id: int, change: int, cause: Cause, note:
 
 @dataclass(frozen=True)
 class Movement:
+    id: int
     at: datetime
     cause: Cause
     # The lot's number within its item, in the order the lots came: 1, 2… rather than an id of the database.
@@ -97,6 +133,7 @@ def history(connection: Connection, item_id: int) -> list[Movement]:
     numbered = _numbered_lots(item_id)
     rows = connection.execute(
         select(
+            stock_movements.c.id,
             stock_movements.c.created_at,
             stock_movements.c.cause,
             numbered.c.number,
@@ -106,7 +143,7 @@ def history(connection: Connection, item_id: int) -> list[Movement]:
         .join_from(stock_movements, numbered, stock_movements.c.lot_id == numbered.c.id)
         .order_by(stock_movements.c.id)
     )
-    return [Movement(at, Cause(cause), number, change, note) for at, cause, number, change, note in rows]
+    return [Movement(id, at, Cause(cause), number, change, note) for id, at, cause, number, change, note in rows]
 
 
 def _move(connection: Connection, lot_id: int, change: int, cause: Cause, note: str = "") -> int:

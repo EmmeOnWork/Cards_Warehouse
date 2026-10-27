@@ -1,0 +1,10 @@
+{# The item's lots to choose from, with their copies and unit cost: shared by the adjustment and the opening. #}
+<label for="lot">Lotto</label>
+<select id="lot" name="lot">
+  {% for lot in lots %}
+    <option value="{{ lot.number }}"{% if form.lot == lot.number | string %} selected{% endif %}>
+      Lotto {{ lot.number }} · {{ lot.available | copies }} ·
+      {% if lot.unit_cost_cents is none %}costo sconosciuto{% else %}{{ lot.unit_cost_cents | euros }} €{% endif %}
+    </option>
+  {% endfor %}
+</select>

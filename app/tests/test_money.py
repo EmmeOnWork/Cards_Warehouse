@@ -27,6 +27,12 @@ def test_an_amount_is_written_in_euros_with_a_comma_and_two_decimals(cents, text
     assert format_euros(cents) == text
 
 
+# A margin in loss. The cents are those of the amount, not what is left to the euro below it: -2,50 is not -3,50.
+@pytest.mark.parametrize(("cents", "text"), [(-250, "-2,50"), (-5, "-0,05"), (-1200, "-12,00")])
+def test_an_amount_below_zero_is_written_with_a_minus_in_front(cents, text):
+    assert format_euros(cents) == text
+
+
 # A fee or a margin, typed on the phone: exact to the hundredth, never a float.
 @pytest.mark.parametrize(
     ("text", "percent"), [("10", Decimal(10)), ("2,5", Decimal("2.5")), (" 12.25 ", Decimal("12.25"))]
