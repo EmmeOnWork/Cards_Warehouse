@@ -47,7 +47,9 @@ def test_a_card_sent_for_grading_comes_back_as_an_item_of_its_own_with_the_gradi
     ]
     graded_page = signed_in_client.get(graded_card).text
     assert "Costo 49,67 € · obiettivo 20 % · netto obiettivo 59,61 €" in text(graded_page)
-    assert table_rows(graded_page) == [["Vinted", "59,61 €"], ["Tilt", "61,34 €"], ["eBay", "59,61 €"]]
+    # The channel and its price: the margin columns after them are the fixed price's (test_fixed_price.py).
+    prices = [row[:2] for row in table_rows(graded_page)]
+    assert prices == [["Vinted", "59,61 €"], ["Tilt", "61,34 €"], ["eBay", "59,61 €"]]
     assert "PSA 9 · spedita il 27/10/2026 · tornata il 15/01/2027" in text(graded_page)
     assert "Costo della gradazione 15,00 €, pagato da Luca · quote Manuel 50 % · Luca 50 %" in text(graded_page)
     lots_left = links(signed_in_client.get(raw_card).text)["Movimenti e rettifiche"]
