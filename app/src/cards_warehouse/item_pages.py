@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import Connection
 
-from cards_warehouse import channels, gradings, items, listing_texts, partners, photos, purchases, stock
+from cards_warehouse import channels, exposure, gradings, items, listing_texts, partners, photos, purchases, stock
 from cards_warehouse.cost_split import TooSmallToSplit
 from cards_warehouse.items import Card, Condition, Grading, Item, Kind, Sealed, grade_text
 from cards_warehouse.money import format_euros, parse_euros
@@ -399,12 +399,53 @@ def item_page(request: Request, item_id: int):
         shown = photos.of_item(connection, request.app.state.photos, item_id)
         texts = listing_texts.of_item(connection, item_id)
         grading = {"at_grader": gradings.at_grader(connection, item_id), "graded": gradings.back(connection, item_id)}
+        listings = exposure.of_item(connection, item_id)
+        listed = {listing.channel for listing in listings}
+        free_channels = [channel for channel in channels.every(connection) if channel.name not in listed]
+        bulk = _bulk(connection, item_id) if item.kind == Kind.BULK else None
     # A card in its condition can be graded; a graded card has its grade already.
     gradable = isinstance(item.details, Card) and isinstance(item.details.state, Condition)
     return templates.TemplateResponse(
         request,
         "item.html",
-        {"item": item, "photos": shown, "texts": texts, "gradable": gradable, **prices, **grading},
+        {
+            "item": item,
+            "photos": shown,
+            "texts": texts,
+            "gradable": gradable,
+            "listings": listings,
+            "free_channels": free_channels,
+            "bulk": bulk,
+            **prices,
+            **grading,
+        },
+    )
+
+
+class _BulkLot(NamedTuple):
+    number: int
+    cards: int
+    cost_cents: int | None
+    # The name and the percent of each person, Manuel first.
+    shares: list[tuple[str, int]]
+
+
+class _Bulk(NamedTuple):
+    # None when the cost of a lot is not known.
+    cost_cents: int | None
+    lots: list[_BulkLot]
+
+
+def _bulk(connection: Connection, item_id: int) -> _Bulk:
+    """The lots the bulk is made of, one from each opening, with their shares; and what its cards cost in all."""
+    lots = [lot for lot in stock.lots(connection, item_id) if lot.available]
+    costs = [lot.cost_cents for lot in lots]
+    return _Bulk(
+        None if None in costs else sum(costs),
+        [
+            _BulkLot(lot.number, lot.available, lot.cost_cents, purchases.people_of_lot(connection, lot.id))
+            for lot in lots
+        ],
     )
 
 

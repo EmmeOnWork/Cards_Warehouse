@@ -7,11 +7,39 @@
   <dl>
     <dt>Tipo</dt><dd>{{ kinds[item.kind] }}</dd>
     <dt>Gioco</dt><dd>{{ item.game }}</dd>
-    <dt>Copie disponibili</dt><dd>{{ item.available }}</dd>
+    {% if bulk %}
+      <dt>Carte</dt><dd>{{ item.available }}</dd>
+      <dt>Costo</dt><dd>{% if bulk.cost_cents is none %}sconosciuto{% else %}{{ bulk.cost_cents | euros }} €{% endif %}</dd>
+    {% else %}
+      <dt>Copie disponibili</dt><dd>{{ item.available }}</dd>
+    {% endif %}
   </dl>
-  <p><a href="/items/{{ item.id }}/edit">Modifica</a> · <a href="/items/{{ item.id }}/movements">Movimenti e rettifiche</a>
-    {%- if item.kind == "sealed" %} · <a href="/items/{{ item.id }}/opening">Apri in buste</a>{% endif %}
+  {# The bulk is born from an opening, with its game and language: the edit has no kind for it. #}
+  <p>{% if not bulk %}<a href="/items/{{ item.id }}/edit">Modifica</a> · {% endif %}<a href="/items/{{ item.id }}/movements">Movimenti e rettifiche</a>
+    {%- if item.kind == "sealed" %} · <a href="/items/{{ item.id }}/opening">Apri in buste</a> · <a href="/items/{{ item.id }}/cards-opening">Apri in carte</a>{% endif %}
     {%- if gradable %} · <a href="/items/{{ item.id }}/grading">Manda a gradare</a>{% endif %}</p>
+
+  {% if bulk %}
+    <section>
+      <h2>Lotti del bulk</h2>
+      <p>Uno per apertura, con le quote di ciò che è stato aperto: estrazioni e vendite partono dal più vecchio.</p>
+      <table>
+        <thead>
+          <tr><th>Lotto</th><th class="number">Carte</th><th class="number">Costo</th><th>Quote</th></tr>
+        </thead>
+        <tbody>
+          {% for lot in bulk.lots %}
+            <tr>
+              <td>{{ lot.number }}</td>
+              <td class="number">{{ lot.cards }}</td>
+              <td class="number">{% if lot.cost_cents is none %}sconosciuto{% else %}{{ lot.cost_cents | euros }} €{% endif %}</td>
+              <td>{% for person, percent in lot.shares %}{% if not loop.first %} · {% endif %}{{ person }} {{ percent }} %{% endfor %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
 
   {% if at_grader %}
     <section>
@@ -51,5 +79,8 @@
     {% with item_id=item.id, typed=texts.texts, title_limit=texts.title_limit %}{% include "item_texts.html" %}{% endwith %}
   </section>
 
-  {% include "item_prices.html" %}
+  {# The bulk has no unit cost to price a card by: what it sells for comes with its sale. #}
+  {% if not bulk %}{% include "item_prices.html" %}{% endif %}
+
+  {% include "item_listings.html" %}
 {% endblock %}

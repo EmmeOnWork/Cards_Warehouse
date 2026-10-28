@@ -8,7 +8,8 @@ from pydantic import BaseModel
 
 from cards_warehouse import items, openings, stock
 from cards_warehouse.backups import LOCAL_TIME
-from cards_warehouse.pages import templates
+from cards_warehouse.items import Kind
+from cards_warehouse.pages import copies, templates
 from cards_warehouse.stock import Cause
 
 # What the history calls each cause.
@@ -38,11 +39,14 @@ templates.env.globals["adjustments"] = {choice: label for choice, (label, _, _) 
 templates.env.filters["day"] = lambda at: f"{at.astimezone(LOCAL_TIME):%d/%m/%Y}"
 
 
-def _copies(count: int) -> str:
-    return "1 copia" if count == 1 else f"{count} copie"
+def _came_out(count: int, kind: Kind) -> str:
+    """The copies of an item that came out of an opening, as the history names them: 36 buste, 1 carta."""
+    if kind == Kind.SEALED:
+        return "1 busta" if count == 1 else f"{count} buste"
+    return "1 carta" if count == 1 else f"{count} carte"
 
 
-templates.env.filters["copies"] = _copies
+templates.env.filters["came_out"] = _came_out
 
 router = APIRouter()
 
@@ -74,7 +78,7 @@ def adjust(request: Request, item_id: int, form: Annotated[AdjustmentForm, Form(
         except _Refused as refusal:
             error = str(refusal)
         except stock.NotEnoughStock:
-            error = f"Il lotto {lot.number} ha {_copies(lot.available)}: non puoi toglierne {-change}."
+            error = f"Il lotto {lot.number} ha {copies(lot.available)}: non puoi toglierne {-change}."
         else:
             return RedirectResponse(f"/items/{item_id}/movements", status_code=303)
     return _page(request, item_id, form, error=error, status_code=422)

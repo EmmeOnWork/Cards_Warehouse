@@ -16,6 +16,7 @@ from cards_warehouse import (
     ebay,
     grading_pages,
     item_pages,
+    listing_pages,
     listing_text_pages,
     live_pages,
     movement_pages,
@@ -91,6 +92,7 @@ def create_app(
     app.include_router(grading_pages.router)
     app.include_router(purchase_pages.router)
     app.include_router(live_pages.router)
+    app.include_router(listing_pages.router)
     access.protect(
         app,
         stored_password=StoredPassword(engine, infisical_hash=password_hash),

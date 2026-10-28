@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action_kinds[action.kind] }} su {{ action.listing.channel }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ action_kinds[action.kind] }} su {{ action.listing.channel }}</h1>
+  <p><a href="/items/{{ action.listing.item_id }}">{{ name }}</a></p>
+
+  {# Each with a tap, to paste in the channel's app: the price as its field takes it, without the euro sign. #}
+  <h2>Titolo</h2>
+  <p class="listing-text">{{ texts.title }}</p>
+  <button type="button" data-copy="{{ texts.title }}">Copia il titolo</button>
+  <h2>Descrizione</h2>
+  <p class="listing-text">{{ texts.description }}</p>
+  <button type="button" data-copy="{{ texts.description }}">Copia la descrizione</button>
+  <h2>Prezzo</h2>
+  <p class="listing-text">{{ action.listing.price_cents | euros }} € · {{ action.listing.quantity }} {{ "copia" if action.listing.quantity == 1 else "copie" }}</p>
+  <button type="button" data-copy="{{ action.listing.price_cents | euros }}">Copia il prezzo</button>
+
+  <h2>Foto</h2>
+  {% if photos %}
+    <p>Tieni premuta una foto e scegli «Aggiungi a Foto»: la ritrovi nel rullino, dove l'app del canale la prende.</p>
+    {% for photo in photos %}
+      <figure><img src="{{ photo.link }}" alt="Foto {{ loop.index }}" loading="lazy"></figure>
+    {% endfor %}
+  {% else %}
+    <p>Nessuna foto: aggiungile dalla <a href="/items/{{ action.listing.item_id }}">scheda dell'articolo</a>.</p>
+  {% endif %}
+
+  <form method="post" action="/actions/{{ action.id }}/done">
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <label for="link">Link dell'annuncio pubblicato</label>
+    <input id="link" name="link" type="url" placeholder="https://" value="{{ typed_link }}" required>
+    <button type="submit">Pubblicato</button>
+  </form>
+
+  <script>
+    // The clipboard is open to a page served over HTTPS, as Tailscale serves the app to the phone.
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-copy]");
+      if (button) navigator.clipboard.writeText(button.dataset.copy).then(() => { button.textContent = "Copiato"; });
+    });
+  </script>
+{% endblock %}

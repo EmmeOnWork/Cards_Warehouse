@@ -19,11 +19,15 @@
             <td>{{ movement.at | day }}</td>
             <td>
               {{ causes[movement.cause] }}
-              {% set counterpart = counterparts.get(movement.id) %}
-              {% if counterpart %}
+              {% set others = counterparts.get(movement.id, []) %}
+              {% if others %}
                 <br><small>
-                  {% if movement.change < 0 %}In {{ counterpart.copies }} buste:{% else %}Da{% endif %}
-                  <a href="/items/{{ counterpart.item_id }}">{{ counterpart.name }}</a>
+                  {% if movement.change < 0 %}In{% else %}Da{% endif %}
+                  {% for other in others %}
+                    {%- if not loop.first %} ·{% endif %}
+                    {% if movement.change < 0 %}{{ other.copies | came_out(other.kind) }}:{% endif %}
+                    <a href="/items/{{ other.item_id }}">{{ other.name }}</a>
+                  {%- endfor %}
                 </small>
               {% endif %}
               {% if movement.note %}<br><small>{{ movement.note }}</small>{% endif %}

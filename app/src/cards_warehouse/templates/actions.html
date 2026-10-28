@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Da fare · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Da fare</h1>
+  {# Channel by channel: all those of one app done in one go. #}
+  {% for channel, actions in by_channel.items() %}
+    <section>
+      <h2>{{ channel }}</h2>
+      <p>{{ actions | length }} da fare</p>
+      <ul>
+        {% for action in actions %}
+          <li><a href="/actions/{{ action.id }}">{{ action_kinds[action.kind] }} {{ names[action.listing.item_id] }}</a></li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% else %}
+    <p>Niente da fare: ogni annuncio è dove deve essere.</p>
+  {% endfor %}
+{% endblock %}

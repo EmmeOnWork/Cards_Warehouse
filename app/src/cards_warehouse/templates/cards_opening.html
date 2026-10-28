@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Apri in carte · {{ item.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ item.name }}</h1>
+  <p><a href="/items/{{ item.id }}">Torna all'articolo</a></p>
+
+  <section>
+    <h2>Apri in carte</h2>
+    <p>
+      Registra le carte che valgono un annuncio, e il resto va nel bulk del gioco. Il costo di ciò che apri si divide in
+      proporzione ai valori stimati, e carte e bulk hanno le sue stesse quote.
+    </p>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form class="load" method="post" action="/items/{{ item.id }}/cards-opening">
+      {# Enter on the keyboard opens, rather than taking a card away: Enter presses the first button of a form. #}
+      <button type="submit" tabindex="-1" aria-hidden="true" style="position: absolute; left: -10000px">Apri</button>
+
+      {% include "lot_choice.html" %}
+
+      <label for="copies">Copie da aprire</label>
+      <input id="copies" name="copies" type="number" inputmode="numeric" min="1" value="{{ form.copies }}" required>
+
+      {# The cards, added one at a time: nothing is saved until the opening is. #}
+      {% if added %}
+        <h3>Carte uscite</h3>
+        <table>
+          <tbody>
+            {% for card in added %}
+              {% set name = names.get(card.card, card.name) %}
+              <tr>
+                <td>{{ name }} × {{ card.quantity }} · stimata {{ card.estimated_value }} €</td>
+                <td>
+                  <button type="submit" name="remove_card" value="{{ loop.index0 }}" formnovalidate
+                          aria-label="Togli {{ name }}">Togli</button>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% for card in form.cards %}<input type="hidden" name="cards" value="{{ card }}">{% endfor %}
+        <h3>La carta che stai scrivendo</h3>
+      {% endif %}
+
+      <label for="card">Carta</label>
+      <select id="card" name="card">
+        <option value="">Una carta nuova</option>
+        {% for card in cards %}
+          <option value="{{ card.id }}"{% if form.card == card.id | string %} selected{% endif %}>{{ card.name }}</option>
+        {% endfor %}
+      </select>
+      <label for="name">Nome della carta nuova: gioco, lingua e set sono quelli di ciò che apri</label>
+      <input id="name" name="name" placeholder="Charizard ex" value="{{ form.name }}">
+      <label for="number">Numero della carta nuova, se vuoi</label>
+      <input id="number" name="number" placeholder="199/193" value="{{ form.number }}">
+      <label for="condition">Condizione della carta nuova</label>
+      <select id="condition" name="condition">
+        {% for value, label in conditions.items() %}
+          <option value="{{ value }}"{% if form.condition == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="quantity">Copie</label>
+      <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" value="{{ form.quantity }}" required>
+
+      <label for="estimated_value">Valore stimato di una copia, in euro</label>
+      <input id="estimated_value" name="estimated_value" inputmode="decimal" placeholder="50,00"
+             value="{{ form.estimated_value }}">
+      {# The bulk is typed last: its fields, still empty, do not stop a card being added. #}
+      <button type="submit" name="add_card" value="true" formnovalidate>Aggiungi un'altra carta</button>
+
+      <h3>Il resto, nel bulk</h3>
+      <label for="bulk_cards">Carte, anche a occhio</label>
+      <input id="bulk_cards" name="bulk_cards" type="number" inputmode="numeric" min="1" placeholder="300"
+             value="{{ form.bulk_cards }}" required>
+      <label for="bulk_value">Valore stimato di tutto il bulk, in euro</label>
+      <input id="bulk_value" name="bulk_value" inputmode="decimal" placeholder="3,00" value="{{ form.bulk_value }}"
+             required>
+
+      <button type="submit">Apri</button>
+    </form>
+  </section>
+{% endblock %}

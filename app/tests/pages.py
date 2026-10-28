@@ -73,7 +73,65 @@ def buttons(html: str) -> dict[str, tuple[str, dict[str, str]]]:
     return parser.buttons
 
 
+def copies(html: str) -> dict[str, str]:
+    """What each copy button puts in the clipboard, by what it says to a person."""
+    parser = _Reader()
+    parser.feed(html)
+    return parser.copies
+
+
+def checkboxes(html: str, name: str) -> dict[str, str]:
+    """What each box with that name sends when ticked, by the text of its label."""
+    parser = _Reader()
+    parser.feed(html)
+    return parser.checkboxes.get(name, {})
+
+
+def sections(html: str) -> dict[str, str]:
+    """The HTML of each <section> of the page, by its heading: one part of a page, to read as the others read it."""
+    parser = _Sections(html)
+    parser.feed(html)
+    return parser.sections
+
+
 _UNREAD = ("head", "script", "style")
+_HEADINGS = ("h1", "h2", "h3")
+
+
+class _Sections(HTMLParser):
+    def __init__(self, html: str) -> None:
+        super().__init__()
+        self._html = html
+        # Where each line of the page starts: the parser tells where a tag is by its line and column.
+        self._line_starts = [0]
+        for line in html.split("\n"):
+            self._line_starts.append(self._line_starts[-1] + len(line) + 1)
+        self.sections: dict[str, str] = {}
+        # The sections being read, the innermost last: where each starts, and the text of its heading.
+        self._open: list[tuple[int, list[str]]] = []
+        self._heading: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs) -> None:
+        if tag == "section":
+            self._open.append((self._here(), []))
+        elif tag in _HEADINGS and self._open and not self._open[-1][1]:
+            self._heading = self._open[-1][1]
+
+    def handle_endtag(self, tag) -> None:
+        if tag in _HEADINGS:
+            self._heading = None
+        elif tag == "section" and self._open:
+            start, heading = self._open.pop()
+            end = self._html.index(">", self._here()) + 1
+            self.sections[" ".join("".join(heading).split())] = self._html[start:end]
+
+    def handle_data(self, data) -> None:
+        if self._heading is not None:
+            self._heading.append(data)
+
+    def _here(self) -> int:
+        line, column = self.getpos()
+        return self._line_starts[line - 1] + column
 
 
 class _Reader(HTMLParser):
@@ -85,6 +143,8 @@ class _Reader(HTMLParser):
         self.images: list[str] = []
         self.image_labels: list[str] = []
         self.buttons: dict[str, tuple[str, dict[str, str]]] = {}
+        self.checkboxes: dict[str, dict[str, str]] = {}
+        self.copies: dict[str, str] = {}
         self.suggestions: dict[str, dict[str, list[str]]] = {}
         self.text: list[str] = []
         # Inside <head>, <script> or <style>: text a person does not read on the page.
@@ -104,6 +164,9 @@ class _Reader(HTMLParser):
         self._select: str | None = None
         self._href: str | None = None
         self._link_text: list[str] = []
+        # The text of the <label> being read, and the name and value of the box inside it, if any.
+        self._label: list[str] | None = None
+        self._labelled_box: tuple[str, str] | None = None
 
     def handle_starttag(self, tag, attrs) -> None:
         self.text.append(" ")
@@ -142,6 +205,8 @@ class _Reader(HTMLParser):
         elif tag == "button":
             self._button = dict(attrs)
             self._button_text = []
+        elif tag == "label":
+            self._label, self._labelled_box = [], None
 
     def handle_endtag(self, tag) -> None:
         self.text.append(" ")
@@ -160,7 +225,14 @@ class _Reader(HTMLParser):
             label = self._button.get("aria-label") or " ".join("".join(self._button_text).split())
             sent = {self._button["name"]: self._button.get("value", "")} if "name" in self._button else {}
             self.buttons[label] = (self._form_action, sent)
+            if "data-copy" in self._button:
+                self.copies[label] = self._button["data-copy"]
             self._button = None
+        if tag == "label" and self._label is not None:
+            if self._labelled_box is not None:
+                name, value = self._labelled_box
+                self.checkboxes.setdefault(name, {})[" ".join("".join(self._label).split())] = value
+            self._label = None
         if tag == "a" and self._href is not None:
             self.links[" ".join("".join(self._link_text).split())] = self._href
             self._href = None
@@ -178,6 +250,8 @@ class _Reader(HTMLParser):
 
     def _input(self, attributes: dict[str, str | None]) -> None:
         kind = attributes.get("type", "text")
+        if kind == "checkbox" and "name" in attributes and self._label is not None:
+            self._labelled_box = (attributes["name"], attributes.get("value") or "on")
         if "name" not in attributes or kind in ("submit", "button", "file", "image", "reset"):
             return
         if kind in ("checkbox", "radio") and "checked" not in attributes:
@@ -196,6 +270,8 @@ class _Reader(HTMLParser):
             self._link_text.append(data)
         if self._button is not None:
             self._button_text.append(data)
+        if self._label is not None:
+            self._label.append(data)
 
     def _joined(self) -> str:
         text = " ".join("".join(self._text).split())

@@ -4,7 +4,10 @@
   {% for lot in lots %}
     <option value="{{ lot.number }}"{% if form.lot == lot.number | string %} selected{% endif %}>
       Lotto {{ lot.number }} · {{ lot.available | copies }} ·
-      {% if lot.unit_cost_cents is none %}costo sconosciuto{% else %}{{ lot.unit_cost_cents | euros }} €{% endif %}
+      {% if lot.unit_cost_cents is not none %}{{ lot.unit_cost_cents | euros }} €
+      {#- A lot of the bulk has no unit cost: a cent does not divide among its cards. #}
+      {%- elif lot.cost_cents is not none %}{{ lot.cost_cents | euros }} € in tutto
+      {%- else %}costo sconosciuto{% endif %}
     </option>
   {% endfor %}
 </select>

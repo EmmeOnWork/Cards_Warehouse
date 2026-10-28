@@ -1,0 +1,34 @@
+{# The listings section of the item's page (item.html): where the item is offered, and the channels it can be put
+   on sale on. #}
+<section>
+  <h2>Annunci</h2>
+  {% if listings %}
+    <table>
+      <thead>
+        <tr><th>Canale</th><th>Stato</th><th class="number">Prezzo</th><th class="number">Copie</th><th>Link</th></tr>
+      </thead>
+      <tbody>
+        {% for listing in listings %}
+          <tr>
+            <td>{{ listing.channel }}</td>
+            <td>{{ listing_states[listing.status] }}</td>
+            <td class="number">{{ listing.price_cents | euros }} €</td>
+            <td class="number">{{ listing.quantity }}</td>
+            <td class="link">{% if listing.link %}<a href="{{ listing.link }}">{{ listing.link }}</a>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Non è in vendita su nessun canale.</p>
+  {% endif %}
+  {% if free_channels %}
+    {# Each channel chosen gets an action to publish, in Da fare. #}
+    <form method="post" action="/items/{{ item.id }}/listings">
+      {% for channel in free_channels %}
+        <label class="check"><input type="checkbox" name="channel" value="{{ channel.id }}"> {{ channel.name }}</label>
+      {% endfor %}
+      <button type="submit">Metti in vendita</button>
+    </form>
+  {% endif %}
+</section>

@@ -56,10 +56,15 @@ stock_movements = Table(
     Column("created_at", DateTime(timezone=True)),
     # On the copies that came out of an opening: the movement that took the copy opened.
     Column("opening_id", Integer),
+    # On a lot of the bulk, which has no unit cost: the cost that came or went with the cards.
+    Column("cost_cents", Integer),
 )
 
 # The quantity of whatever movements a query picks.
 _quantity = func.coalesce(func.sum(stock_movements.c.change), 0)
+# What the copies of a lot cost, all together, from its movements: by its unit cost, or by the cost moved with the
+# cards on a lot of the bulk. None when not known.
+_cost = func.coalesce(stock_lots.c.unit_cost_cents * _quantity, func.sum(stock_movements.c.cost_cents))
 
 
 def load(
@@ -77,8 +82,7 @@ def load(
     all Manuel's. The movement of the opening the copies came out of, if any: theirs is then an opening too.
     The cause of their movement, when they come from neither: a card back from its grading."""
     _check_quantity(quantity)
-    if unit_cost_cents is not None and unit_cost_cents < 1:
-        raise ValueError("a known cost is at least 1 cent: a cost not known is None, not zero")
+    _check_cost(unit_cost_cents)
     lot_id = connection.execute(
         insert(stock_lots)
         .values(item_id=item_id, unit_cost_cents=unit_cost_cents, purchase_id=purchase_id)
@@ -88,6 +92,24 @@ def load(
         cause = Cause.LOAD if opening_id is None else Cause.OPENING
     connection.execute(
         insert(stock_movements).values(lot_id=lot_id, change=quantity, cause=cause, opening_id=opening_id)
+    )
+    return lot_id
+
+
+def load_bulk(
+    connection: Connection, item_id: int, cards: int, cost_cents: int | None, purchase_id: int | None, opening_id: int
+) -> int:
+    """A new lot of the bulk, its cards counted roughly, out of an opening. Its cost is whole, not one for each card,
+    since a cent does not divide among them: it moves with the cards, on their movements. None is a cost not known."""
+    _check_quantity(cards)
+    _check_cost(cost_cents)
+    lot_id = connection.execute(
+        insert(stock_lots).values(item_id=item_id, purchase_id=purchase_id).returning(stock_lots.c.id)
+    ).scalar_one()
+    connection.execute(
+        insert(stock_movements).values(
+            lot_id=lot_id, change=cards, cause=Cause.OPENING, opening_id=opening_id, cost_cents=cost_cents
+        )
     )
     return lot_id
 
@@ -191,14 +213,19 @@ def cost_to_cover(connection: Connection, item_id: int) -> int | None:
 def of_items() -> Subquery:
     """The stock of each item with lots, for a query to join: `item_id`, the quantity `available`, and
     `cost_unknown` when a lot has a cost not known."""
+    per_lot = (
+        select(stock_lots.c.item_id, _quantity.label("available"), _cost.is_(None).label("cost_unknown"))
+        .join_from(stock_lots, stock_movements, stock_movements.c.lot_id == stock_lots.c.id)
+        .group_by(stock_lots.c.id)
+        .subquery()
+    )
     return (
         select(
-            stock_lots.c.item_id,
-            _quantity.label("available"),
-            func.bool_or(stock_lots.c.unit_cost_cents.is_(None)).label("cost_unknown"),
+            per_lot.c.item_id,
+            func.sum(per_lot.c.available).label("available"),
+            func.bool_or(per_lot.c.cost_unknown).label("cost_unknown"),
         )
-        .join_from(stock_lots, stock_movements, stock_movements.c.lot_id == stock_lots.c.id)
-        .group_by(stock_lots.c.item_id)
+        .group_by(per_lot.c.item_id)
         .subquery()
     )
 
@@ -228,13 +255,15 @@ class Lot:
     number: int
     available: int
     unit_cost_cents: int | None
+    # What the copies it has now cost, all together: of a lot of the bulk, the cost moved with its cards.
+    cost_cents: int | None
 
 
 def lots(connection: Connection, item_id: int) -> list[Lot]:
-    """The lots of the item, the oldest first, with the copies each has now."""
+    """The lots of the item, the oldest first, with the copies each has now and what they cost."""
     numbered = _numbered_lots(item_id)
     rows = connection.execute(
-        select(numbered.c.id, numbered.c.number, _quantity, stock_lots.c.unit_cost_cents)
+        select(numbered.c.id, numbered.c.number, _quantity, stock_lots.c.unit_cost_cents, _cost)
         .join_from(numbered, stock_lots, stock_lots.c.id == numbered.c.id)
         .join(stock_movements, stock_movements.c.lot_id == numbered.c.id)
         .group_by(numbered.c.id, numbered.c.number, stock_lots.c.unit_cost_cents)
@@ -250,6 +279,11 @@ def _numbered_lots(item_id: int) -> Subquery:
         .where(stock_lots.c.item_id == item_id)
         .subquery()
     )
+
+
+def _check_cost(cost_cents: int | None) -> None:
+    if cost_cents is not None and cost_cents < 1:
+        raise ValueError("a known cost is at least 1 cent: a cost not known is None, not zero")
 
 
 def _check_quantity(quantity: int) -> None:

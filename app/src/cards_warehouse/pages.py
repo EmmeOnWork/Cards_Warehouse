@@ -13,6 +13,13 @@ templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 templates.env.filters["euros"] = format_euros
 templates.env.filters["percent"] = format_percent
 
+
+def copies(count: int) -> str:
+    return "1 copia" if count == 1 else f"{count} copie"
+
+
+templates.env.filters["copies"] = copies
+
 router = APIRouter()
 
 

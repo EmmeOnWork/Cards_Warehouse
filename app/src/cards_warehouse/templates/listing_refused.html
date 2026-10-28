@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block title %}Non messo in vendita · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Non messo in vendita</h1>
+  <p class="error" role="alert">{{ reason }}</p>
+  <p><a href="/items/{{ item_id }}">Torna all'articolo</a></p>
+{% endblock %}
