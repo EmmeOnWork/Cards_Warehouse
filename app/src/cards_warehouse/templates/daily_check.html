@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Controllo · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Controllo</h1>
+  <p{% if freshness.alarm %} class="error"{% endif %}>{{ freshness.text }}</p>
+  <form method="post" action="/check"><button type="submit">Controlla adesso</button></form>
+  {# Only what is out of line: each part with what to fix, and a link to where it is fixed. #}
+  {% if outcome %}
+    {% if outcome.over_offered %}
+      <section>
+        <h2>Annunci con più copie di quelle rimaste</h2>
+        <table>
+          <tr><th>Articolo</th><th>Canale</th><th class="number">Offerte</th><th class="number">Rimaste</th></tr>
+          {% for found in outcome.over_offered %}
+            <tr>
+              <td><a href="/items/{{ found.item_id }}">{{ found.item }}</a></td>
+              <td>{{ found.channel }}</td>
+              <td class="number">{{ found.offered }}</td>
+              <td class="number">{{ found.available }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      </section>
+    {% endif %}
+    {% if outcome.open_on_sold_out %}
+      <section>
+        <h2>Annunci aperti su articoli esauriti</h2>
+        <table>
+          <tr><th>Articolo</th><th>Canale</th><th>Stato</th></tr>
+          {% for found in outcome.open_on_sold_out %}
+            <tr>
+              <td><a href="/items/{{ found.item_id }}">{{ found.item }}</a></td>
+              <td>{{ found.channel }}</td>
+              <td>{{ listing_states[found.status] }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      </section>
+    {% endif %}
+    {% if outcome.stale_actions %}
+      <section>
+        <h2>Azioni in sospeso da troppo tempo</h2>
+        <table>
+          <tr><th>Azione</th><th>Canale</th><th>Dal</th></tr>
+          {% for found in outcome.stale_actions %}
+            <tr>
+              <td><a href="/actions/{{ found.action_id }}">{{ action_kinds[found.kind] }} {{ found.item }}</a></td>
+              <td>{{ found.channel }}</td>
+              <td>{{ found.since | day }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      </section>
+    {% endif %}
+    {% if outcome.unsold_items %}
+      <section>
+        <h2>Articoli senza vendite da troppo tempo</h2>
+        <table>
+          <tr><th>Articolo</th><th>Fermo dal</th><th>Prezzi</th></tr>
+          {% for found in outcome.unsold_items %}
+            <tr>
+              <td><a href="/items/{{ found.item_id }}">{{ found.item }}</a></td>
+              <td>{{ found.since | day }}</td>
+              <td>
+                {% for channel, price in found.prices %}{{ channel }} {{ price | euros }} €{% if not loop.last %}, {% endif %}{% else %}Non in vendita{% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+        </table>
+      </section>
+    {% endif %}
+  {% endif %}
+  <section>
+    <h2>Soglie</h2>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {# Valid from the next check: the one shown was found with those in force then. #}
+    <form method="post" action="/check/thresholds">
+      <label for="stale_action_days">Azioni in sospeso da più di (giorni)</label>
+      <input id="stale_action_days" name="stale_action_days" inputmode="numeric" value="{{ thresholds.stale_action_days }}">
+      <label for="unsold_item_days">Articoli senza vendite da più di (giorni)</label>
+      <input id="unsold_item_days" name="unsold_item_days" inputmode="numeric" value="{{ thresholds.unsold_item_days }}">
+      <button type="submit">Salva le soglie</button>
+    </form>
+  </section>
+{% endblock %}

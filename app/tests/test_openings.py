@@ -323,6 +323,178 @@ def test_packs_opened_into_cards_name_every_item_that_came_out_of_them(connectio
         )
 
 
+# Mixed openings, as (packs in the box, its cost, packs left closed), whose opened packs fit in the first lot of packs,
+# where the two steps open them from: the first lot at a cent over, all of it, a box split evenly, a pack the only
+# one opened or the only one in the box, and a cost not known.
+SAME_AS_TWO_STEPS = (
+    (36, 8990, 26),
+    (36, 8990, 10),
+    (36, 8964, 0),
+    (3, 10400, 1),
+    (24, 6000, 23),
+    (1, 600, 0),
+    (18, None, 9),
+)
+
+
+# One step or two, the same: a mixed opening makes the packs, the cards and the bulk that the box opened into packs,
+# and then the opened packs into cards, would make, at the same costs.
+@pytest.mark.parametrize(("packs", "box_cost", "closed"), SAME_AS_TWO_STEPS)
+def test_a_mixed_opening_makes_what_the_box_into_packs_and_then_the_packs_into_cards_would(
+    connection, packs, box_cost, closed
+):
+    def made(mixed: bool):
+        box = stock.load(connection, a_sealed(connection, "Booster box"), quantity=1, unit_cost_cents=box_cost)
+        packs_item = a_sealed(connection, "Busta")
+        cards = [Pulled(a_card(connection, "Charizard ex"), 1, 4000), Pulled(a_card(connection, "Pikachu"), 2, 500)]
+        rest = Rest(cards=18, estimated_value_cents=500)
+        if mixed:
+            openings.into_packs_and_cards(connection, box, packs_item, packs, closed, cards, rest)
+        else:
+            openings.into_packs(connection, box, packs_item, packs)
+            openings.into_cards(connection, stock.lots(connection, packs_item)[0].id, packs - closed, cards, rest)
+        lots = [
+            [(lot.available, lot.cost_cents) for lot in stock.lots(connection, item_id) if lot.available]
+            for item_id in (packs_item, *(card.item_id for card in cards))
+        ]
+        bulk_lot = stock.lots(connection, bulk_of(connection))[-1]
+        return lots, (bulk_lot.available, bulk_lot.cost_cents)
+
+    assert made(mixed=True) == made(mixed=False)
+
+
+def least_box_cost(packs: int, opened: int, parts: int) -> int:
+    """The least a box costs that gives a cent to each pack, and to each part of what comes out of the opened ones:
+    these take the first equal parts, a cent over the others."""
+    box_cost = packs
+    while opened * (box_cost // packs) + min(opened, box_cost % packs) < parts:
+        box_cost += 1
+    return box_cost
+
+
+# Not a cent lost, and none made up: the packs left closed, the cards and the new lot of bulk cost, all together, what
+# the box cost. Also when the packs opened take parts with a cent over and parts without, as 35 of 36 packs out of
+# 89,90 €, which the two steps could not open together.
+def test_packs_left_closed_cards_and_bulk_out_of_a_mixed_opening_cost_together_what_the_box_cost(connection):
+    for pulled, bulk_value in (([(1, 20000), (1, 1), (1, 1)], 500), ([], 100)):
+        parts = sum(copies for copies, _ in pulled) + 1
+        for packs in PACKS:
+            for closed in sorted({0, 1, packs // 2, packs - 1} - {packs}):
+                least = least_box_cost(packs, packs - closed, parts)
+                for box_cost in (least, least + 1, 8990, 10400, 999_999_999):
+                    case = (pulled, packs, closed, box_cost)
+                    box_item = a_sealed(connection, "Booster box")
+                    box = stock.load(connection, box_item, quantity=1, unit_cost_cents=box_cost)
+                    packs_item = a_sealed(connection, "Busta")
+                    cards = [Pulled(a_card(connection, "Carta"), n, value) for n, value in pulled]
+                    rest = Rest(cards=50, estimated_value_cents=bulk_value)
+
+                    openings.into_packs_and_cards(connection, box, packs_item, packs, closed, cards, rest)
+
+                    pack_lots = stock.lots(connection, packs_item)
+                    card_lots = [lot for card in cards for lot in stock.lots(connection, card.item_id)]
+                    bulk_lot = stock.lots(connection, bulk_of(connection))[-1]
+                    assert sum(lot.available for lot in pack_lots) == closed, case
+                    assert sum(lot.available for lot in card_lots) == parts - 1, case
+                    assert bulk_lot.available == 50, case
+                    made = pack_lots + card_lots + [bulk_lot]
+                    assert sum(lot.cost_cents for lot in made) == box_cost, case
+
+
+# The packs left closed, the cards and the new lot of bulk are the box's, in the same shares: a sale of any of them
+# will split its net as a sale of the box would. 104,00 € in 36 packs makes two lots of the closed ones, and a card
+# has two lots.
+@pytest.mark.parametrize(
+    "shares",
+    [
+        {"Manuel": 100},
+        {"Manuel": 50, "Luca": 50},
+        {"Manuel": 34, "Luca": 33, "Giulia": 33},
+        {"Luca": 100},
+    ],
+)
+def test_all_that_comes_out_of_a_mixed_opening_carries_the_shares_of_the_box(connection, shares):
+    people = {name: None if name == "Manuel" else partners.add(connection, name) for name in shares}
+    shared = Purchase(
+        total_cost_cents=10400,
+        shipping_cents=0,
+        purchased_on=date(2026, 10, 20),
+        shares=tuple(Share(people[name], percent, 104 * percent) for name, percent in shares.items()),
+    )
+    box_item = a_sealed(connection, "Booster box")
+    purchases.record(connection, shared, box_item, quantity=1)
+    box = stock.lots(connection, box_item)[0].id
+    packs_item = a_sealed(connection, "Busta")
+    cards = [Pulled(a_card(connection, "Charizard ex"), 1, 20000), Pulled(a_card(connection, "Pikachu"), 3, 500)]
+    rest = Rest(cards=100, estimated_value_cents=250)
+
+    openings.into_packs_and_cards(connection, box, packs_item, 36, 26, cards, rest)
+
+    lots = stock.lots(connection, packs_item)
+    lots += [lot for card in cards for lot in stock.lots(connection, card.item_id)]
+    lots += stock.lots(connection, bulk_of(connection))
+    assert len(lots) == 6
+    assert [purchases.shares_of_lot(connection, lot.id) for lot in lots] == [
+        {people[name]: percent for name, percent in shares.items()}
+    ] * 6
+
+
+# Not free, which would make their margin infinite: a box whose cost is not known, opened mixed, makes packs, cards
+# and bulk whose cost is not known.
+def test_a_box_whose_cost_is_not_known_opened_mixed_makes_all_whose_cost_is_not_known(connection):
+    box = stock.load(connection, a_sealed(connection, "Booster box"), quantity=1, unit_cost_cents=None)
+    packs_item = a_sealed(connection, "Busta")
+    card = a_card(connection, "Charizard ex")
+
+    openings.into_packs_and_cards(
+        connection, box, packs_item, 36, 26, [Pulled(card, 2, 5000)], Rest(cards=30, estimated_value_cents=300)
+    )
+
+    made = (packs_item, card, bulk_of(connection))
+    assert [[(lot.available, lot.cost_cents) for lot in stock.lots(connection, item_id)] for item_id in made] == [
+        [(26, None)],
+        [(2, None)],
+        [(30, None)],
+    ]
+
+
+# All packs left closed is an opening into packs, and cards would come out of nothing, even when the cost is not
+# known; more packs closed than the box has, or fewer than none, or a box of no packs, make no sense. 0,20 € cannot
+# give a cent to each of 36 packs, nor 0,01 € of the one pack opened to the card and the bulk. A value of nothing gives
+# nothing to split by, and a bulk of no cards would be made out of nothing. Refused before anything changes: the box
+# stays closed, and no packs, cards or bulk come out.
+@pytest.mark.parametrize(
+    ("box_cost", "packs", "closed", "card_value", "rest"),
+    [
+        (8990, 36, 36, 5000, Rest(cards=50, estimated_value_cents=100)),
+        (None, 36, 36, 5000, Rest(cards=50, estimated_value_cents=100)),
+        (8990, 36, 37, 5000, Rest(cards=50, estimated_value_cents=100)),
+        (8990, 36, -1, 5000, Rest(cards=50, estimated_value_cents=100)),
+        (8990, 0, 0, 5000, Rest(cards=50, estimated_value_cents=100)),
+        (20, 36, 26, 5000, Rest(cards=50, estimated_value_cents=100)),
+        (36, 36, 35, 5000, Rest(cards=50, estimated_value_cents=100)),
+        (8990, 36, 26, 0, Rest(cards=50, estimated_value_cents=100)),
+        (None, 36, 26, 5000, Rest(cards=50, estimated_value_cents=0)),
+        (8990, 36, 26, 5000, Rest(cards=0, estimated_value_cents=100)),
+    ],
+)
+def test_a_mixed_opening_that_cannot_be_split_is_refused_and_the_box_stays_closed(
+    connection, box_cost, packs, closed, card_value, rest
+):
+    box_item = a_sealed(connection, "Booster box")
+    box = stock.load(connection, box_item, quantity=1, unit_cost_cents=box_cost)
+    packs_item = a_sealed(connection, "Busta")
+    card = a_card(connection, "Charizard ex")
+
+    with pytest.raises(ValueError):
+        openings.into_packs_and_cards(connection, box, packs_item, packs, closed, [Pulled(card, 1, card_value)], rest)
+
+    assert stock.available(connection, box_item) == 1
+    assert stock.lots(connection, packs_item) == []
+    assert stock.lots(connection, card) == []
+    assert items.listing(connection, items.items.c.kind == Kind.BULK) == []
+
+
 def bulk_of(connection) -> int:
     """The one bulk of the tests, Pokémon in Italian."""
     [bulk] = items.listing(connection, items.items.c.kind == Kind.BULK)

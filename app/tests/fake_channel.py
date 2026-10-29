@@ -9,7 +9,17 @@ from cards_warehouse.exposure import Listing
 class InMemoryChannel:
     def __init__(self) -> None:
         self.published: list[Listing] = []
+        self.updated: list[Listing] = []
+        self.closed: list[Listing] = []
 
     def publish(self, connection: Connection, listing: Listing) -> str:
         self.published.append(listing)
         return f"https://channel.test/listings/{len(self.published)}"
+
+    def update(self, connection: Connection, listing: Listing) -> bool:
+        self.updated.append(listing)
+        return True
+
+    def close(self, connection: Connection, listing: Listing) -> bool:
+        self.closed.append(listing)
+        return True

@@ -14,8 +14,18 @@ from cards_warehouse.manual_channels import ActionKind
 from cards_warehouse.pages import templates
 
 # What the pages call the state of a listing, and what an action asks of Manuel.
-templates.env.globals["listing_states"] = {Status.TO_PUBLISH: "da pubblicare", Status.ACTIVE: "attivo"}
-templates.env.globals["action_kinds"] = {ActionKind.PUBLISH: "Pubblica"}
+templates.env.globals["listing_states"] = {
+    Status.TO_PUBLISH: "da pubblicare",
+    Status.ACTIVE: "attivo",
+    Status.TO_UPDATE: "da aggiornare",
+    Status.TO_CLOSE: "da chiudere",
+    Status.CLOSED: "chiuso",
+}
+templates.env.globals["action_kinds"] = {
+    ActionKind.PUBLISH: "Pubblica",
+    ActionKind.UPDATE: "Aggiorna",
+    ActionKind.CLOSE: "Chiudi",
+}
 
 router = APIRouter()
 
@@ -32,7 +42,7 @@ class DoneForm(BaseModel):
 def put_on_sale(request: Request, item_id: int, form: Annotated[PutOnSaleForm, Form()]):
     try:
         with request.app.state.engine.begin() as connection:
-            exposure.put_on_sale(connection, item_id, form.channel, manual_channels.MANUAL)
+            exposure.put_on_sale(connection, item_id, form.channel, request.app.state.channel_operations)
     except NothingToSell:
         reason = "Non ci sono copie disponibili da mettere in vendita."
     except NoPrice:
@@ -42,6 +52,27 @@ def put_on_sale(request: Request, item_id: int, form: Annotated[PutOnSaleForm, F
     return templates.TemplateResponse(
         request, "listing_refused.html", {"reason": reason, "item_id": item_id}, status_code=422
     )
+
+
+# A listing the channel refused, asked again once Manuel fixed what the item's page said.
+@router.post("/listings/{listing_id}/again")
+def publish_again(request: Request, listing_id: int):
+    with request.app.state.engine.begin() as connection:
+        listing = exposure.one(connection, listing_id)
+        if listing is None:
+            raise HTTPException(status_code=404)
+        exposure.publish_again(connection, listing_id, request.app.state.channel_operations)
+    return RedirectResponse(f"/items/{listing.item_id}", status_code=303)
+
+
+@router.post("/listings/{listing_id}/withdraw")
+def withdraw(request: Request, listing_id: int):
+    with request.app.state.engine.begin() as connection:
+        listing = exposure.one(connection, listing_id)
+        if listing is None:
+            raise HTTPException(status_code=404)
+        exposure.withdraw(connection, listing_id, request.app.state.channel_operations)
+    return RedirectResponse(f"/items/{listing.item_id}", status_code=303)
 
 
 @router.get("/actions")
@@ -63,8 +94,14 @@ def action_page(request: Request, action_id: int):
 
 @router.post("/actions/{action_id}/done")
 def action_done(request: Request, action_id: int, form: Annotated[DoneForm, Form()]):
-    link = form.link.strip()
-    if not _is_link(link):
+    with request.app.state.engine.connect() as connection:
+        action = manual_channels.action(connection, action_id)
+    # Ticked twice, as with a double tap: it is done already.
+    if action is None:
+        return RedirectResponse("/actions", status_code=303)
+    # Only a listing just published has a link to paste: one updated or closed stays where it was.
+    link = form.link.strip() if action.kind == ActionKind.PUBLISH else None
+    if link is not None and not _is_link(link):
         reason = "Incolla il link dell'annuncio pubblicato: comincia con https://"
         return _action_page(request, action_id, typed_link=form.link, error=reason, status_code=422)
     with request.app.state.engine.begin() as connection:

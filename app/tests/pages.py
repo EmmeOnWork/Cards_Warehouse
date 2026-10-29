@@ -24,6 +24,13 @@ def select_options(html: str, name: str) -> list[str]:
     return parser.options.get(name, [])
 
 
+def choices(html: str, name: str) -> dict[str, str]:
+    """What each choice of the <select> with that name sends when chosen, by its text."""
+    parser = _Reader()
+    parser.feed(html)
+    return parser.choices.get(name, {})
+
+
 def suggestions(html: str, field: str) -> dict[str, list[str]]:
     """The values a text field suggests, by the game they are offered for: "" when for every game."""
     parser = _Reader()
@@ -81,7 +88,7 @@ def copies(html: str) -> dict[str, str]:
 
 
 def checkboxes(html: str, name: str) -> dict[str, str]:
-    """What each box with that name sends when ticked, by the text of its label."""
+    """What each box with that name sends when ticked, by the text of its label: a round one too, of a choice."""
     parser = _Reader()
     parser.feed(html)
     return parser.checkboxes.get(name, {})
@@ -139,6 +146,7 @@ class _Reader(HTMLParser):
         super().__init__()
         self.rows: list[list[str]] = []
         self.options: dict[str, list[str]] = {}
+        self.choices: dict[str, dict[str, str]] = {}
         self.links: dict[str, str] = {}
         self.images: list[str] = []
         self.image_labels: list[str] = []
@@ -245,12 +253,13 @@ class _Reader(HTMLParser):
             self.options[self._select].append(text)
             value = self._option.get("value", text)
             self._choices.append(value)
+            self.choices.setdefault(self._select, {})[text] = value
             if "selected" in self._option:
                 self._chosen = value
 
     def _input(self, attributes: dict[str, str | None]) -> None:
         kind = attributes.get("type", "text")
-        if kind == "checkbox" and "name" in attributes and self._label is not None:
+        if kind in ("checkbox", "radio") and "name" in attributes and self._label is not None:
             self._labelled_box = (attributes["name"], attributes.get("value") or "on")
         if "name" not in attributes or kind in ("submit", "button", "file", "image", "reset"):
             return

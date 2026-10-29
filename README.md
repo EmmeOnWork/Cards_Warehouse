@@ -24,6 +24,8 @@ Every tool runs in a container with pinned versions: the PC needs only Docker, G
 | `make test` | Runs the app tests against a real PostgreSQL, including the ones that build and run the real image |
 | `make password-hash` | Asks for a new password of the app, without showing it, and prints the hash to put in Infisical |
 | `make ebay-connect` | Connects the eBay account: prints a link to agree on eBay, then the values to put in Infisical ([how](docs/ebay.md)) |
+| `make ebay-setup` | Sets up the eBay account for the listings the app publishes: policies and location, values for Infisical ([how](docs/ebay.md#setting-up-the-seller)) |
+| `make ebay-record` | Publishes three listings on the eBay sandbox and records its answers, which the tests replay ([how](docs/ebay.md#the-answers-recorded)) |
 | `make scan IMAGE=<image>` | Fails when the image has a HIGH or CRITICAL vulnerability with a fix |
 | `make app-shell` | Opens a shell with Python, uv, the Docker CLI, trivy and actionlint, in `app/` |
 | `make shell` | Opens a shell with Terraform, the AWS CLI, kubectl, Helm and Velero |

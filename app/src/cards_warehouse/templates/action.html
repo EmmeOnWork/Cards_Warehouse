@@ -6,6 +6,22 @@
   <h1>{{ action_kinds[action.kind] }} su {{ action.listing.channel }}</h1>
   <p><a href="/items/{{ action.listing.item_id }}">{{ name }}</a></p>
 
+  {# A listing on its channel already: Manuel opens it there and changes it, with nothing to paste but the price. #}
+  {% if action.kind != "publish" %}
+    <p><a href="{{ action.listing.link }}">Apri l'annuncio su {{ action.listing.channel }}</a></p>
+    <form method="post" action="/actions/{{ action.id }}/done">
+      {% if action.kind == "update" %}
+        <p class="listing-text">Porta l'annuncio a {{ action.listing.quantity | copies }} a {{ action.listing.price_cents | euros }} €.</p>
+        <button type="button" data-copy="{{ action.listing.price_cents | euros }}">Copia il prezzo</button>
+        <button type="submit">Aggiornato</button>
+      {% else %}
+        {# Sold out, or withdrawn from this channel only: either way it offers nothing anymore. #}
+        <p class="listing-text">Chiudi l'annuncio su {{ action.listing.channel }}.</p>
+        <button type="submit">Chiuso</button>
+      {% endif %}
+    </form>
+  {% else %}
+
   {# Each with a tap, to paste in the channel's app: the price as its field takes it, without the euro sign. #}
   <h2>Titolo</h2>
   <p class="listing-text">{{ texts.title }}</p>
@@ -33,6 +49,7 @@
     <input id="link" name="link" type="url" placeholder="https://" value="{{ typed_link }}" required>
     <button type="submit">Pubblicato</button>
   </form>
+  {% endif %}
 
   <script>
     // The clipboard is open to a page served over HTTPS, as Tailscale serves the app to the phone.

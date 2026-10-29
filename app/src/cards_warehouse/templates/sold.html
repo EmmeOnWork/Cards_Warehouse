@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Venduto · {{ name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ name }}</h1>
+  <p><a href="/items/{{ sale.item_id }}">Torna all'articolo</a></p>
+
+  <section>
+    <h2>Vendita</h2>
+    <dl>
+      <dt>Canale</dt><dd>{{ sale.channel }}</dd>
+      <dt>Copie</dt><dd>{{ sale.quantity }}</dd>
+      <dt>Prezzo</dt><dd>{{ sale.price_cents | euros }} €</dd>
+      <dt>Commissione</dt><dd>{{ sale.fee_cents | euros }} €</dd>
+      <dt>Spedizione</dt><dd>{{ sale.shipping_cents | euros }} €</dd>
+      <dt>Costo</dt><dd>{% if sale.cost_cents is none %}sconosciuto{% else %}{{ sale.cost_cents | euros }} €{% endif %}</dd>
+      {# On the cost: what is left of the price once the fee, the shipping and the copies are paid. #}
+      <dt>Margine</dt>
+      <dd>{% if sale.margin is none %}non calcolabile{% else %}{{ sale.margin.cents | euros }} € · {{ sale.margin.percent | percent }} %{% endif %}</dd>
+      {% if sale.note %}<dt>Nota</dt><dd>{{ sale.note }}</dd>{% endif %}
+    </dl>
+  </section>
+
+  {# Right after the sale: where the item is offered still, with copies no longer there. #}
+  <section>
+    <h2>Da fare</h2>
+    {% if actions %}
+      <ul>
+        {% for action in actions %}
+          <li><a href="/actions/{{ action.id }}">{{ action_kinds[action.kind] }} su {{ action.listing.channel }}</a></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Niente da fare: ogni annuncio offre solo le copie rimaste.</p>
+    {% endif %}
+  </section>
+{% endblock %}

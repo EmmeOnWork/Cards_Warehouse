@@ -13,7 +13,9 @@ from cards_warehouse import (
     access,
     backups,
     channel_pages,
+    daily_check_pages,
     ebay,
+    extraction_pages,
     grading_pages,
     item_pages,
     listing_pages,
@@ -26,8 +28,11 @@ from cards_warehouse import (
     photos,
     price_pages,
     purchase_pages,
+    sale_pages,
 )
+from cards_warehouse.channel_operations import ByChannel
 from cards_warehouse.database import create_database_engine
+from cards_warehouse.ebay_channel import EbayChannel, SellerSetup
 from cards_warehouse.password import StoredPassword
 
 
@@ -74,6 +79,8 @@ def create_app(
     def session_key() -> dict[str, str]:
         return {"fingerprint": hashlib.sha256(session_secret.encode()).hexdigest()[:16]}
 
+    # The time the pages go by: the tests fix it.
+    app.state.now = now
     # Read at every visit of the home page: a backup that just finished shows at once.
     app.state.backup_outcome = lambda: backups.last_outcome(read_backups, now())
     # A slow eBay delays the eBay page by 10 s at most.
@@ -81,6 +88,10 @@ def create_app(
     app.state.ebay_status = lambda: ebay.status(ebay_account)
     # The private bucket of the foundations, with the scoped key from Infisical. Nothing is asked to AWS here.
     app.state.photos = photo_store or photos.S3Store.from_environment()
+    # What the pages hand to the exposure for every channel: eBay through its API once switched on its page.
+    app.state.channel_operations = ByChannel(
+        {"eBay": EbayChannel(ebay_account, SellerSetup.from_environment(), app.state.photos)}
+    )
     app.include_router(pages.router)
     app.include_router(item_pages.router)
     app.include_router(channel_pages.router)
@@ -89,9 +100,12 @@ def create_app(
     app.include_router(listing_text_pages.router)
     app.include_router(price_pages.router)
     app.include_router(opening_pages.router)
+    app.include_router(extraction_pages.router)
     app.include_router(grading_pages.router)
     app.include_router(purchase_pages.router)
+    app.include_router(sale_pages.router)
     app.include_router(live_pages.router)
+    app.include_router(daily_check_pages.router)
     app.include_router(listing_pages.router)
     access.protect(
         app,

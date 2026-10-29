@@ -28,15 +28,20 @@ capabilities:
 readOnlyRootFilesystem: true
 {{- end }}
 
-{{/* The environment of the app, the same for the migrations that run before it. The libpq variables lead to the
-database; a key missing from the Secret keeps the pod from starting, and the pod events name it. */}}
-{{- define "cards-warehouse.appEnv" -}}
+{{/* The libpq variables that lead to the database, its password apart: it comes from the Secret. */}}
+{{- define "cards-warehouse.databaseEnv" -}}
 - name: PGHOST
   value: {{ include "cards-warehouse.postgresName" . }}
 - name: PGDATABASE
   value: {{ .Values.database.name }}
 - name: PGUSER
   value: {{ .Values.database.user }}
+{{- end }}
+
+{{/* The environment of the app, the same for the migrations that run before it. A key missing from the Secret keeps
+the pod from starting, and the pod events name it. */}}
+{{- define "cards-warehouse.appEnv" -}}
+{{ include "cards-warehouse.databaseEnv" . }}
 - name: PHOTOS_BUCKET
   value: {{ .Values.photos.bucket }}
 - name: PHOTOS_REGION

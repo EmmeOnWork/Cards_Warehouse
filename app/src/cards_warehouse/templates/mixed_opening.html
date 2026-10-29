@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Apertura mista · {{ item.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ item.name }}</h1>
+  <p><a href="/items/{{ item.id }}">Torna all'articolo</a></p>
+
+  <section>
+    <h2>Apertura mista</h2>
+    <p>
+      Una copia esce dal lotto e il suo costo si divide in parti uguali tra le buste. Quelle che restano chiuse tengono
+      la loro parte; quella delle buste aperte va alle carte che valgono un annuncio e al bulk, in proporzione ai valori
+      stimati. Tutto ha le quote del box.
+    </p>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form class="load" method="post" action="/items/{{ item.id }}/mixed-opening">
+      {# Enter on the keyboard opens, rather than taking a card away: Enter presses the first button of a form. #}
+      <button type="submit" tabindex="-1" aria-hidden="true" style="position: absolute; left: -10000px">Apri</button>
+
+      {% include "lot_choice.html" %}
+
+      <label for="packs">Buste nel box</label>
+      <input id="packs" name="packs" type="number" inputmode="numeric" min="1" placeholder="36" value="{{ form.packs }}" required>
+
+      <label for="pack">Busta</label>
+      <select id="pack" name="pack">
+        <option value="">Un articolo nuovo</option>
+        {% for pack in packs %}
+          <option value="{{ pack.id }}"{% if form.pack == pack.id | string %} selected{% endif %}>{{ pack.name }}</option>
+        {% endfor %}
+      </select>
+      <label for="pack_name">Nome della busta nuova: gioco, lingua e set sono quelli del box</label>
+      <input id="pack_name" name="pack_name" placeholder="Busta Evoluzioni a Paldea" value="{{ form.pack_name }}">
+
+      <label for="closed">Buste che restano chiuse</label>
+      <input id="closed" name="closed" type="number" inputmode="numeric" min="0" placeholder="26" value="{{ form.closed }}"
+             required>
+
+      <h3>Le buste aperte</h3>
+      {% include "opened_cards.html" %}
+
+      <button type="submit">Apri una copia</button>
+    </form>
+  </section>
+{% endblock %}

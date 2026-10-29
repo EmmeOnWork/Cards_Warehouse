@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from cards_warehouse import gradings, items, partners, stock
+from cards_warehouse import exposure, gradings, items, partners, stock
 from cards_warehouse.backups import LOCAL_TIME
 from cards_warehouse.gradings import AlreadyBack, Sending
 from cards_warehouse.money import parse_euros
@@ -50,6 +50,7 @@ def send(request: Request, item_id: int, form: Annotated[SendingForm, Form()]):
             if lot is None:
                 raise _Refused("Scegli il lotto della carta da gradare.")
             gradings.send(connection, lot.id, _sending(form))
+            exposure.align(connection, item_id, request.app.state.channel_operations)
     except _Refused as refusal:
         error = str(refusal)
     except stock.NotEnoughStock:

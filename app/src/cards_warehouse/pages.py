@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 
+from cards_warehouse import daily_check
 from cards_warehouse.money import format_euros, format_percent
 
 # Inside the package, so the image carries them without the sources.
@@ -25,7 +26,11 @@ router = APIRouter()
 
 @router.get("/")
 def home(request: Request):
-    return templates.TemplateResponse(request, "home.html", {"backup": request.app.state.backup_outcome()})
+    with request.app.state.engine.connect() as connection:
+        check = daily_check.summary(daily_check.last(connection), request.app.state.now())
+    return templates.TemplateResponse(
+        request, "home.html", {"backup": request.app.state.backup_outcome(), "check": check}
+    )
 
 
 @router.get("/ebay")

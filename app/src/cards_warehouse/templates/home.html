@@ -2,6 +2,7 @@
 
 {% block content %}
   <p{% if backup.alarm %} class="error"{% endif %}>{{ backup.text }}</p>
+  <p{% if check.alarm %} class="error"{% endif %}>{{ check.text }}</p>
   <h1>Magazzino</h1>
   <p><a class="button" href="/password">Cambia password</a></p>
 {% endblock %}

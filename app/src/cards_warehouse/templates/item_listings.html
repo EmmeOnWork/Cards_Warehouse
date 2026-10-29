@@ -19,6 +19,19 @@
         {% endfor %}
       </tbody>
     </table>
+    {# Off one channel, by Manuel's choice: the others go on offering it. #}
+    {% for listing in listings if listing.status != "to_close" %}
+      <form method="post" action="/listings/{{ listing.id }}/withdraw">
+        <button type="submit">Ritira da {{ listing.channel }}</button>
+      </form>
+    {% endfor %}
+    {# Why a channel refused a listing, and a tap to ask it again once that is fixed. #}
+    {% for listing in listings if listing.problem %}
+      <p class="error" role="alert">{{ listing.problem }}</p>
+      <form method="post" action="/listings/{{ listing.id }}/again">
+        <button type="submit">Riprova su {{ listing.channel }}</button>
+      </form>
+    {% endfor %}
   {% else %}
     <p>Non è in vendita su nessun canale.</p>
   {% endif %}

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from cards_warehouse import channels
+from cards_warehouse import channels, exposure
 from cards_warehouse.money import format_euros, format_percent, parse_euros, parse_percent
 from cards_warehouse.pages import templates
 from cards_warehouse.pricing import FeeRule
@@ -45,6 +45,10 @@ class TargetMarginForm(BaseModel):
     target_margin: str = ""
 
 
+class PublishingForm(BaseModel):
+    through_api: bool = False
+
+
 class _Refused(Exception):
     """What was typed cannot be saved: the message says why."""
 
@@ -79,6 +83,7 @@ def change_target_margin(request: Request, form: Annotated[TargetMarginForm, For
         return _channel_list(request, margin=form, error=reason, status_code=422)
     with request.app.state.engine.begin() as connection:
         channels.change_target_margin(connection, percent)
+        exposure.align_every(connection, request.app.state.channel_operations)
     return RedirectResponse("/channels", status_code=303)
 
 
@@ -95,7 +100,19 @@ def change_fee(request: Request, channel_id: int, form: Annotated[FeeForm, Form(
         return _channel_page(request, channel_id, form, error=str(refusal), status_code=422)
     with request.app.state.engine.begin() as connection:
         channels.change_fee(connection, channel_id, fee)
+        exposure.align_every(connection, request.app.state.channel_operations)
     return RedirectResponse("/channels", status_code=303)
+
+
+# Only on a channel the app has an adapter for: on the others there is no API to publish through.
+@router.post("/channels/{channel_id}/publishing")
+def change_publishing(request: Request, channel_id: int, form: Annotated[PublishingForm, Form()]):
+    with request.app.state.engine.begin() as connection:
+        channel = channels.one(connection, channel_id)
+        if channel is None or not request.app.state.channel_operations.has_api(channel.name):
+            raise HTTPException(status_code=404)
+        channels.publish_through_api(connection, channel_id, form.through_api)
+    return RedirectResponse(f"/channels/{channel_id}", status_code=303)
 
 
 def _read_fee(form: FeeForm) -> FeeRule:
@@ -160,6 +177,11 @@ def _channel_page(
     return templates.TemplateResponse(
         request,
         "channel.html",
-        {"channel": channel, "form": form or FeeForm.of(channel.fee), "error": error},
+        {
+            "channel": channel,
+            "has_api": request.app.state.channel_operations.has_api(channel.name),
+            "form": form or FeeForm.of(channel.fee),
+            "error": error,
+        },
         status_code=status_code,
     )

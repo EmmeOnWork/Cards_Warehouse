@@ -1,14 +1,14 @@
 """The price of an item, fixed by Manuel on the item's page after his market research, and the reference price he
-based it on."""
+based it on. And the price forced on one channel only, such as for a promotion there. The listings follow each."""
 
 from datetime import date, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from cards_warehouse import items
+from cards_warehouse import channels, exposure, items
 from cards_warehouse.backups import LOCAL_TIME
 from cards_warehouse.items import Reference
 from cards_warehouse.money import parse_euros
@@ -26,6 +26,15 @@ templates.env.globals["margin_warnings"] = {
 
 class FixedPriceForm(BaseModel):
     fixed_price: str = ""
+
+
+class ForcedPriceForm(BaseModel):
+    # By its name, as the item's page lists the channels.
+    channel: str = ""
+    forced_price: str = ""
+
+
+templates.env.globals["new_forced_price"] = ForcedPriceForm
 
 
 class ReferenceForm(BaseModel):
@@ -50,6 +59,7 @@ def fix_price(request: Request, item_id: int, form: Annotated[FixedPriceForm, Fo
         return _refused(request, item_id, "fixed_price_form.html", form, refusal)
     with request.app.state.engine.begin() as connection:
         items.fix_price(connection, item_id, cents)
+        exposure.align(connection, item_id, request.app.state.channel_operations)
     return RedirectResponse(f"/items/{item_id}", status_code=303)
 
 
@@ -58,7 +68,36 @@ def fix_price(request: Request, item_id: int, form: Annotated[FixedPriceForm, Fo
 def take_fixed_price_away(request: Request, item_id: int):
     with request.app.state.engine.begin() as connection:
         items.fix_price(connection, item_id, None)
+        exposure.align(connection, item_id, request.app.state.channel_operations)
     return RedirectResponse(f"/items/{item_id}", status_code=303)
+
+
+@router.post("/items/{item_id}/forced-prices")
+def force_price(request: Request, item_id: int, form: Annotated[ForcedPriceForm, Form()]):
+    try:
+        cents = _price(form.forced_price, "Il prezzo forzato")
+    except _Refused as refusal:
+        return _refused(request, item_id, "forced_price_form.html", form, refusal)
+    with request.app.state.engine.begin() as connection:
+        channels.force_price(connection, item_id, _channel_id(connection, form.channel), cents)
+        exposure.align(connection, item_id, request.app.state.channel_operations)
+    return RedirectResponse(f"/items/{item_id}", status_code=303)
+
+
+# The promotion over: the channel is back at the price of the others.
+@router.post("/items/{item_id}/forced-prices/delete")
+def take_forced_price_away(request: Request, item_id: int, form: Annotated[ForcedPriceForm, Form()]):
+    with request.app.state.engine.begin() as connection:
+        channels.force_price(connection, item_id, _channel_id(connection, form.channel), None)
+        exposure.align(connection, item_id, request.app.state.channel_operations)
+    return RedirectResponse(f"/items/{item_id}", status_code=303)
+
+
+def _channel_id(connection, name: str) -> int:
+    channel = next((channel for channel in channels.every(connection) if channel.name == name), None)
+    if channel is None:
+        raise HTTPException(status_code=404)
+    return channel.id
 
 
 @router.post("/items/{item_id}/reference-price")
@@ -100,9 +139,18 @@ def _today() -> date:
 
 def _refused(request: Request, item_id: int, form_page: str, typed: BaseModel, refusal: _Refused):
     """The reason, and the form again with what was typed, to fix it."""
+    with request.app.state.engine.connect() as connection:
+        # What the form of a forced price offers.
+        channel_names = [channel.name for channel in channels.every(connection)]
     return templates.TemplateResponse(
         request,
         "price_refused.html",
-        {"reason": str(refusal), "item_id": item_id, "form_page": form_page, "typed": typed},
+        {
+            "reason": str(refusal),
+            "item_id": item_id,
+            "form_page": form_page,
+            "typed": typed,
+            "channel_names": channel_names,
+        },
         status_code=422,
     )

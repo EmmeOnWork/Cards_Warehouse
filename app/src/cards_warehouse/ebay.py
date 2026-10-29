@@ -17,6 +17,11 @@ TOKEN_URLS = {
     "sandbox": "https://api.sandbox.ebay.com/identity/v1/oauth2/token",
     "production": "https://api.ebay.com/identity/v1/oauth2/token",
 }
+# Where the APIs of a seller answer: most on api, the images (Media API) on apim.
+API_URLS = {"sandbox": "https://api.sandbox.ebay.com", "production": "https://api.ebay.com"}
+MEDIA_URLS = {"sandbox": "https://apim.sandbox.ebay.com", "production": "https://apim.ebay.com"}
+# Where a buyer sees a listing, by its number. The sandbox shows every listing on its .com site.
+LISTING_PAGES = {"sandbox": "https://sandbox.ebay.com/itm/", "production": "https://www.ebay.it/itm/"}
 # What the app may do on the account, asked when Manuel grants it: publishing and closing listings (inventory),
 # the seller's policies (account), reading the orders (fulfillment). A renewal asks for the same.
 SCOPES = (
@@ -84,6 +89,27 @@ class Account:
             self._access_token = answer["access_token"]
             self._renew_at = started + answer["expires_in"] - RENEW_BEFORE_SECONDS
         return self._access_token
+
+    def api(self, path: str) -> str:
+        return f"{API_URLS[self._environment]}{path}"
+
+    def media(self, path: str) -> str:
+        return f"{MEDIA_URLS[self._environment]}{path}"
+
+    def listing_page(self, listing_id: str) -> str:
+        return f"{LISTING_PAGES[self._environment]}{listing_id}"
+
+    def request(self, method: str, url: str, **options) -> httpx.Response:
+        """A call to one of eBay's APIs on the account, with a short-lived token. EbayUnavailable when eBay does not
+        answer, or answers with an error of its own: what eBay refuses comes back as it is, for the caller to read."""
+        headers = {"Authorization": f"Bearer {self.access_token()}", **options.pop("headers", {})}
+        try:
+            response = self._http.request(method, url, headers=headers, **options)
+        except httpx.HTTPError as error:
+            raise EbayUnavailable from error
+        if response.is_server_error:
+            raise EbayUnavailable
+        return response
 
     def _new_token(self) -> dict:
         try:

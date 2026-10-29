@@ -52,7 +52,7 @@
   <header>
     <a href="/">Magazzino</a>
     {% if request.session.get("signed_in") %}
-      <nav><a href="/items">Articoli</a><a href="/actions">Da fare</a><a href="/purchases">Acquisti</a><a href="/channels">Canali</a><a href="/lives">Live</a><a href="/ebay">eBay</a></nav>
+      <nav><a href="/items">Articoli</a><a href="/actions">Da fare</a><a href="/purchases">Acquisti</a><a href="/channels">Canali</a><a href="/lives">Live</a><a href="/ebay">eBay</a><a href="/check">Controllo</a></nav>
       <form method="post" action="/logout"><button type="submit">Esci</button></form>
     {% endif %}
   </header>

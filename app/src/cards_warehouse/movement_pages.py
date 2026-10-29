@@ -6,7 +6,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from cards_warehouse import items, openings, stock
+from cards_warehouse import exposure, items, openings, stock
 from cards_warehouse.backups import LOCAL_TIME
 from cards_warehouse.items import Kind
 from cards_warehouse.pages import copies, templates
@@ -24,6 +24,7 @@ templates.env.globals["causes"] = {
     Cause.OPENING: "Apertura",
     Cause.SENT_FOR_GRADING: "Spedita a gradare",
     Cause.GRADED: "Tornata gradata",
+    Cause.EXTRACTION: "Estrazione",
 }
 # The choices of an adjustment: its cause, and which way it changes the lot. The number pad of a phone often has
 # no minus sign, so the way is in the choice and the copies are always at least 1.
@@ -75,6 +76,7 @@ def adjust(request: Request, item_id: int, form: Annotated[AdjustmentForm, Form(
         try:
             lot, cause, change = _read(form, stock.lots(connection, item_id))
             stock.adjust(connection, lot.id, change, cause, form.note.strip())
+            exposure.align(connection, item_id, request.app.state.channel_operations)
         except _Refused as refusal:
             error = str(refusal)
         except stock.NotEnoughStock:

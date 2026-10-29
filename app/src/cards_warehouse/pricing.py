@@ -47,9 +47,10 @@ def fee(price_cents: int, rule: FeeRule) -> int:
     return math.ceil(price_cents * Fraction(rule.percent) / 100) + rule.fixed_cents
 
 
-def margin(price_cents: int, fee_cents: int, cost_cents: int) -> Margin:
-    """The margin a price leaves, once the channel has kept its fee, on the cost of the copy."""
-    cents = price_cents - fee_cents - cost_cents
+def margin(price_cents: int, fee_cents: int, cost_cents: int, shipping_cents: int = 0) -> Margin:
+    """The margin a price leaves, once the channel has kept its fee and the shipping left on Manuel is paid, on the
+    cost of the copies."""
+    cents = price_cents - fee_cents - shipping_cents - cost_cents
     # In hundredths of a point, rounded down: never shown above the margin left, and so never on the target when it
     # is a hair below it. A loss is rounded away from zero.
     hundredths = cents * 100 * 100 // cost_cents

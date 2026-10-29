@@ -2,7 +2,7 @@
 TOOLBOX := docker compose -f infra/toolbox/compose.yaml run --rm --build toolbox
 APP_DEV := docker compose -f app/compose.yaml run --rm --build dev
 
-.PHONY: shell tf-check chart-check platform-up platform-down backup restore tailscale-up app-shell lint test password-hash ebay-connect scan hooks
+.PHONY: shell tf-check chart-check platform-up platform-down backup restore tailscale-up app-shell lint test password-hash ebay-connect ebay-setup ebay-record scan hooks
 
 shell: ## Open a shell with terraform, the AWS CLI, kubectl, Helm and Velero
 	$(TOOLBOX) bash
@@ -58,6 +58,12 @@ password-hash: ## Ask for a new app password, unseen, and print its hash: the va
 
 ebay-connect: ## Connect the eBay account: a link to agree on eBay, then the values to put in Infisical (docs/ebay.md)
 	$(APP_DEV) uv run --quiet python -m cards_warehouse.ebay_connect
+
+ebay-setup: ## Set up the eBay account for the app's listings: policies and location, values for Infisical (docs/ebay.md)
+	$(APP_DEV) uv run --quiet python -m cards_warehouse.ebay_setup
+
+ebay-record: ## Publish three listings on the eBay sandbox and record its answers for the tests (docs/ebay.md)
+	$(APP_DEV) uv run --quiet python -m tests.ebay_recording
 
 scan: ## Fail when IMAGE=<image> has a HIGH or CRITICAL vulnerability with a fix (policy: app/trivy.yaml)
 	$(if $(IMAGE),,$(error usage: make scan IMAGE=<image>))

@@ -1,6 +1,6 @@
 # chart
 
-Helm chart that packages the application for Kubernetes: a Deployment, a NodePort Service, PostgreSQL, and the two resources of the Infisical operator that bring the app its secrets:
+Helm chart that packages the application for Kubernetes: a Deployment, a NodePort Service, PostgreSQL, the CronJob of the daily check, and the two resources of the Infisical operator that bring the app its secrets:
 
 - `InfisicalAuth`: signs in to Infisical as the cluster's machine identity, with the credential Terraform puts in the `infisical` namespace;
 - `InfisicalStaticSecret`: copies two folders of Infisical, the app's `/app` and `/aws`, into the Secret `cards-warehouse-secrets`, which it owns, and reads them again every minute.
@@ -8,6 +8,15 @@ Helm chart that packages the application for Kubernetes: a Deployment, a NodePor
 The Deployment gives the app each secret listed in `secrets` and `optionalSecrets` as an environment variable from that Secret. A name of `optionalSecrets` missing from Infisical leaves the variable unset instead of stopping the pod: these are the eBay values, which exist only once the account is connected ([docs/ebay.md](../docs/ebay.md)). When a value changes, the operator restarts the Deployment (annotation `secrets.infisical.com/auto-reload`), since the app reads its secrets only at start.
 
 The app's pods run as the ServiceAccount `cards-warehouse`. A Role in Velero's namespace lets it list Velero's `Backup` objects and nothing else, so the home page can show the outcome of the last backup ([backup-reader.yaml](templates/backup-reader.yaml)).
+
+## The daily check
+
+A CronJob, `cards-warehouse-daily-check`, runs every day at 07:00 in Italian time (`timeZone: Europe/Rome`) the same image as the app, at the same commit: `python -m cards_warehouse.daily_check`. It looks for listings offering more copies than are left, listings open on items sold out, actions left to do for too long and items with no sale for too long, and writes what it found in the database, where the app shows it on its page `/check` and in a line of the home page. The thresholds are settings of the app, changed from that page.
+
+- **A PC off at 07:00.** `startingDeadlineSeconds: 86400`: when the cluster comes back within a day, Kubernetes starts the check it missed, once. A day without any check is said in red by the app.
+- **Never two at once** (`concurrencyPolicy: Forbid`), and two more tries when the database does not answer (`backoffLimit: 2`). Something found is not a failure: the Job succeeds, and its log is the line of the home page.
+- **The database only.** Its pod gets the libpq variables and `PGPASSWORD`, none of the app's other secrets, and no Kubernetes API token.
+- **By hand**, the same check runs from the button *Controlla adesso* of the page, inside the app. The CronJob itself, from `make shell`: `kubectl -n cards-warehouse create job --from cronjob/cards-warehouse-daily-check daily-check-by-hand`, as [its test](../infra/platform/tests/daily-check.sh) does.
 
 ## Photos
 
@@ -55,7 +64,7 @@ new version ─► new pod: init container migrate ─► app starts ─► Read
 | `image.repository` | `ghcr.io/emmeonwork/cards-warehouse` | Public image on GHCR: the node pulls it with no credentials |
 | `image.tag` | none, required | The commit to run |
 | `secrets` | `[SESSION_SECRET, PASSWORD_HASH, PGPASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]` | The secrets the app needs, by name only: the list in Git. A name missing from Infisical keeps the pod from starting |
-| `optionalSecrets` | the five `EBAY_*` | The secrets the app can start without: missing from Infisical, the variable is not set |
+| `optionalSecrets` | the nine `EBAY_*` | The secrets the app can start without: missing from Infisical, the variable is not set |
 | `infisical.projectSlug`, `.environment`, `.secretPath`, `.awsPath` | the project, `prod`, `/app`, `/aws` | Where the values live in Infisical |
 | `photos.bucket`, `photos.region` | `emmeonwork-cards-warehouse-photos`, `eu-north-1` | The bucket of the item photos, from the foundations |
 | `infisical.refreshInterval` | `60s` | How often the operator reads Infisical again |

@@ -109,6 +109,14 @@ bash infra/platform/tests/backup.sh   # inside make shell, after aws login --rem
 
 It backs up by hand and checks the backup from Velero to the bucket and to the app's home page: see [backups](../../gitops/README.md#backups).
 
+The daily check needs a release and a day of schedule, so its test runs by hand, with the platform up, after the push that brought it:
+
+```sh
+bash infra/platform/tests/daily-check.sh   # inside make shell
+```
+
+It checks that Argo CD installed the CronJob, with the image of the app, every day in Italian time; then it starts a check by hand, waits for it, and checks that the app, in its own pod, shows the line the check logged. The last check tells whether the schedule ran in the last 24 hours: before the first 07:00, run the test again the next day.
+
 The restore is a drill that destroys the platform, so it runs by hand, with the platform up:
 
 ```sh

@@ -13,4 +13,19 @@
     <input id="fee_fixed" name="fee_fixed" inputmode="decimal" value="{{ form.fee_fixed }}" required>
     <button type="submit">Salva</button>
   </form>
+  {% if has_api %}
+    {# The rest of the app does not change: only who publishes the listings of this channel. #}
+    <section>
+      <h2>Pubblicazione</h2>
+      <form method="post" action="/channels/{{ channel.id }}/publishing">
+        {% if channel.publishes_through_api %}
+          <p>L'app pubblica da sola tramite l'API di {{ channel.name }}: per {{ channel.name }} non nascono azioni da fare.</p>
+          <button type="submit" name="through_api" value="false">Torna manuale</button>
+        {% else %}
+          <p>Manuale: per ogni annuncio su {{ channel.name }} nasce un'azione da fare.</p>
+          <button type="submit" name="through_api" value="true">Pubblica da sola con l'API</button>
+        {% endif %}
+      </form>
+    </section>
+  {% endif %}
 {% endblock %}

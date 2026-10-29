@@ -1,0 +1,53 @@
+# The daily check (app/src/cards_warehouse/daily_check.py): every morning, from the app's own image, it looks for what
+# is out of line between the stock, the listings and the actions, and leaves it in the database, where the app shows it.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-daily-check
+spec:
+  # 07:00 in Italy, on summer time and on winter time: Kubernetes reads the hour in that zone, not in UTC.
+  schedule: "0 7 * * *"
+  timeZone: Europe/Rome
+  # When the PC is off at 07:00, the check runs as soon as the cluster is back, within a day: like Velero's backup.
+  startingDeadlineSeconds: 86400
+  # Never two at once: a check still running when the next is due is left to finish.
+  concurrencyPolicy: Forbid
+  # The last runs, for their logs: kubectl logs job/<name>.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      # A database that does not answer: two more tries, then the Job fails, and the app says no check ran.
+      backoffLimit: 2
+      template:
+        metadata:
+          # A name of its own: the app's Service must never send traffic to it.
+          labels:
+            app.kubernetes.io/name: daily-check
+            app.kubernetes.io/instance: {{ .Release.Name }}
+        spec:
+          restartPolicy: Never
+          # It asks Kubernetes nothing: no token.
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: daily-check
+              # The same image as the app, of the same commit: the same code, and the same migrations behind it.
+              image: "{{ .Values.image.repository }}:{{ required "image.tag: the commit to run" .Values.image.tag }}"
+              command: [python, -m, cards_warehouse.daily_check]
+              securityContext:
+                {{- include "cards-warehouse.containerSecurityContext" . | nindent 16 }}
+              # The database only: none of the app's other secrets.
+              env:
+                {{- include "cards-warehouse.databaseEnv" . | nindent 16 }}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "cards-warehouse.secretName" . }}
+                      key: PGPASSWORD
+              # The same as the app's: it loads the same code, and does less.
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}

@@ -20,6 +20,11 @@ optionalSecrets:
   - EBAY_CLIENT_SECRET # the Cert ID of the same keyset
   - EBAY_REFRESH_TOKEN # the durable credential, from make ebay-connect: with it the app asks for its short-lived tokens
   - EBAY_AUTHORIZATION_EXPIRES # when that credential ends, from make ebay-connect
+  # From make ebay-setup: until they exist, a listing the app publishes on eBay says to run it.
+  - EBAY_FULFILLMENT_POLICY_ID # the seller's shipping policy on eBay Italy, made by Manuel on eBay's page
+  - EBAY_PAYMENT_POLICY_ID # the payment policy
+  - EBAY_RETURN_POLICY_ID # the return policy
+  - EBAY_LOCATION_KEY # the place the goods leave from
 
 # Where those values live in Infisical Cloud.
 infisical:

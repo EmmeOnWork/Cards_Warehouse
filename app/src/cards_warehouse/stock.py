@@ -11,6 +11,7 @@ from itertools import groupby
 
 from sqlalchemy import Column, Connection, DateTime, Integer, Subquery, Table, Text, func, insert, select
 
+from cards_warehouse import cost_split
 from cards_warehouse.database import metadata
 
 
@@ -30,6 +31,8 @@ class Cause(StrEnum):
     SENT_FOR_GRADING = "sent_for_grading"
     # Back from the grader with its grade: a lot of its own, in an item graded.
     GRADED = "graded"
+    # A card of the bulk taken out to be sold on its own: it leaves its lot of the bulk, for a lot of its own.
+    EXTRACTION = "extraction"
 
 
 class NotEnoughStock(Exception):
@@ -54,10 +57,13 @@ stock_movements = Table(
     Column("cause", Text),
     Column("note", Text),
     Column("created_at", DateTime(timezone=True)),
-    # On the copies that came out of an opening: the movement that took the copy opened.
+    # On the copies that came out of an opening: the movement that took the copy opened. On a card extracted from the
+    # bulk: the movement that took it out of the bulk.
     Column("opening_id", Integer),
     # On a lot of the bulk, which has no unit cost: the cost that came or went with the cards.
     Column("cost_cents", Integer),
+    # On the copies sold: the sale that took them.
+    Column("sale_id", Integer),
 )
 
 # The quantity of whatever movements a query picks.
@@ -80,7 +86,8 @@ def load(
 
     The purchase the lot comes from, if any, directly or through the openings that made it: a lot without one is
     all Manuel's. The movement of the opening the copies came out of, if any: theirs is then an opening too.
-    The cause of their movement, when they come from neither: a card back from its grading."""
+    The cause of their movement, when it is neither a load nor an opening: a card back from its grading, or one
+    extracted from the bulk."""
     _check_quantity(quantity)
     _check_cost(unit_cost_cents)
     lot_id = connection.execute(
@@ -128,9 +135,47 @@ def load_split(
         load(connection, item_id, len(list(copies)), unit_cost, purchase_id=purchase_id, opening_id=opening_id)
 
 
-def unload(connection: Connection, lot_id: int, quantity: int, cause: Cause) -> int:
+@dataclass(frozen=True)
+class Taken:
+    """A card taken out of a lot of the bulk: the movement that took it, its share of the cost of the lot, and the
+    purchase the lot came from, if any."""
+
+    movement_id: int
+    cost_cents: int | None
+    purchase_id: int | None
+
+
+def take_from_bulk(connection: Connection, item_id: int) -> Taken:
+    """A card out of the bulk, from its oldest lot with cards left, with its share of what the cards of that lot
+    cost: the lot loses the card and the share, with one movement."""
+    # Every lot of the bulk is locked until the transaction ends: a second extraction waits here, then finds the
+    # lot this one left, or the next when this one took its last card.
+    connection.execute(select(stock_lots.c.id).where(stock_lots.c.item_id == item_id).with_for_update())
+    oldest = connection.execute(
+        select(stock_lots.c.id, stock_lots.c.purchase_id)
+        .join_from(stock_lots, stock_movements, stock_movements.c.lot_id == stock_lots.c.id)
+        .where(stock_lots.c.item_id == item_id)
+        .group_by(stock_lots.c.id)
+        .having(_quantity > 0)
+        .order_by(stock_lots.c.id)
+    ).first()
+    if oldest is None:
+        raise NotEnoughStock(f"the bulk {item_id} has no cards")
+    lot_id, purchase_id = oldest
+    cards, cost = connection.execute(
+        select(_quantity, func.sum(stock_movements.c.cost_cents)).where(stock_movements.c.lot_id == lot_id)
+    ).one()
+    # A lot of fewer cents than cards runs out of them before its cards: the cards after cost nothing, and no margin is
+    # worked out on nothing, so theirs is not known, as it is out of a lot whose cost is not known.
+    share = cost_split.one_part(cost, cards) if cost else None
+    movement = _move(connection, lot_id, -1, Cause.EXTRACTION, cost_cents=None if share is None else -share)
+    return Taken(movement, share, purchase_id)
+
+
+def unload(connection: Connection, lot_id: int, quantity: int, cause: Cause, sale_id: int | None = None) -> int:
+    """Copies that leave the lot. The sale that took them, if they were sold."""
     _check_quantity(quantity)
-    return _move(connection, lot_id, -quantity, cause)
+    return _move(connection, lot_id, -quantity, cause, sale_id=sale_id)
 
 
 def adjust(connection: Connection, lot_id: int, change: int, cause: Cause, note: str = "") -> int:
@@ -168,7 +213,15 @@ def history(connection: Connection, item_id: int) -> list[Movement]:
     return [Movement(id, at, Cause(cause), number, change, note) for id, at, cause, number, change, note in rows]
 
 
-def _move(connection: Connection, lot_id: int, change: int, cause: Cause, note: str = "") -> int:
+def _move(
+    connection: Connection,
+    lot_id: int,
+    change: int,
+    cause: Cause,
+    note: str = "",
+    cost_cents: int | None = None,
+    sale_id: int | None = None,
+) -> int:
     # The lot is locked until the transaction ends: a second movement of it waits here, then counts what this one
     # left. Without the lock both would count the same copies, and both would take the last one.
     connection.execute(select(stock_lots.c.id).where(stock_lots.c.id == lot_id).with_for_update())
@@ -177,7 +230,7 @@ def _move(connection: Connection, lot_id: int, change: int, cause: Cause, note: 
         raise NotEnoughStock(f"lot {lot_id} has {in_lot} copies, {-change} asked")
     return connection.execute(
         insert(stock_movements)
-        .values(lot_id=lot_id, change=change, cause=cause, note=note)
+        .values(lot_id=lot_id, change=change, cause=cause, note=note, cost_cents=cost_cents, sale_id=sale_id)
         .returning(stock_movements.c.id)
     ).scalar_one()
 

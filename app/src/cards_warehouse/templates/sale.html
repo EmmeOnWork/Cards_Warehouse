@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Vendi · {{ item.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ item.name }}</h1>
+  <p><a href="/items/{{ item.id }}">Torna all'articolo</a></p>
+
+  <section>
+    <h2>Vendi</h2>
+    <p>Copie disponibili: {{ item.available }}</p>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/items/{{ item.id }}/sales" id="sale">
+      <p>Canale</p>
+      {# The fee of each channel's rule, for the page to propose it as the price is typed: in hundredths of a
+         percent, so the cents are counted as the server counts them, with no rounding of a fraction. #}
+      {% for channel in channels %}
+        <label class="check">
+          <input type="radio" name="channel" value="{{ channel.id }}" required
+                 data-fee-hundredths="{{ (channel.fee.percent * 100) | int }}" data-fee-fixed="{{ channel.fee.fixed_cents }}"
+                 {%- if form.channel == channel.id | string %} checked{% endif %}> {{ channel.name }}
+        </label>
+      {% endfor %}
+
+      <label for="quantity">Copie</label>
+      <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" value="{{ form.quantity }}" required>
+
+      <label for="price">Prezzo incassato, per tutte le copie</label>
+      <input id="price" name="price" inputmode="decimal" placeholder="19,99" value="{{ form.price }}" required>
+
+      <label for="fee">Commissione trattenuta: vuota, quella della regola del canale</label>
+      <input id="fee" name="fee" inputmode="decimal" placeholder="Dalla regola del canale" value="{{ form.fee }}">
+
+      <label for="shipping">Spedizione a tuo carico</label>
+      <input id="shipping" name="shipping" inputmode="decimal" placeholder="0,00" value="{{ form.shipping }}">
+
+      {% if lots %}
+        <label for="lot">Lotto</label>
+        <select id="lot" name="lot">
+          <option value="">Dal più vecchio</option>
+          {% for lot in lots %}
+            <option value="{{ lot.number }}"{% if form.lot == lot.number | string %} selected{% endif %}>
+              Lotto {{ lot.number }} · {{ lot.available | copies }} ·
+              {% if lot.unit_cost_cents is not none %}{{ lot.unit_cost_cents | euros }} €{% else %}costo sconosciuto{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+
+      <label for="note">Nota, se vuoi</label>
+      <input id="note" name="note" placeholder="Prezzo di favore, cliente fisso" value="{{ form.note }}">
+
+      <button type="submit">Registra la vendita</button>
+    </form>
+  </section>
+
+  <script>
+    // The fee of the channel's rule, proposed in its field as the price is typed, until Manuel corrects it: then
+    // it is his. In whole numbers, rounded up as the server rounds it.
+    const sale = document.getElementById("sale");
+    const fee = document.getElementById("fee");
+    fee.addEventListener("input", () => { fee.dataset.typed = fee.value.trim() ? "yes" : ""; });
+    sale.addEventListener("input", (event) => {
+      if (event.target === fee || fee.dataset.typed) return;
+      const channel = sale.querySelector("[name=channel]:checked");
+      const price = document.getElementById("price").value.trim().match(/^([0-9]{1,7})(?:[.,]([0-9]{1,2}))?$/);
+      if (!channel || !price) { fee.value = ""; return; }
+      const cents = Number(price[1]) * 100 + Number((price[2] || "0").padEnd(2, "0"));
+      const hundredths = Number(channel.dataset.feeHundredths);
+      const proposed = Math.floor((cents * hundredths + 9999) / 10000) + Number(channel.dataset.feeFixed);
+      fee.value = `${Math.floor(proposed / 100)},${String(proposed % 100).padStart(2, "0")}`;
+    });
+  </script>
+{% endblock %}

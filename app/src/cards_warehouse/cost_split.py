@@ -17,6 +17,15 @@ def equal_parts(amount_cents: int, parts: int) -> list[int]:
     return [share + 1] * left_over + [share] * (parts - left_over)
 
 
+def one_part(amount_cents: int, parts: int) -> int:
+    """One of the parts that share the amount equally, rounded to the nearest cent and a cent at least: what a card
+    taken out of the bulk costs, of the cost of its lot's cards. The last part is what is left of the amount."""
+    if amount_cents < 1:
+        raise TooSmallToSplit(f"{amount_cents} cents cannot give a cent to a part")
+    # Half a cent up, in integers: a float would lose cents.
+    return max(1, (2 * amount_cents + parts) // (2 * parts))
+
+
 def in_proportion(amount_cents: int, values: list[int]) -> list[int]:
     """The amount in parts as the values are to one another: 101 € for pieces worth 200 € and 2 € is 100 € and
     1 €. Each part is its exact share rounded down, and the cents left over go one each to the largest remainders.

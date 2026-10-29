@@ -1,0 +1,13 @@
+{# The price forced on one channel, such as for a promotion there: on the item's page, and again on the page that says
+   why it was not saved. #}
+<form method="post" action="/items/{{ item_id }}/forced-prices">
+  <label for="forced_channel">Prezzo forzato su un solo canale, per esempio per una promozione</label>
+  <select id="forced_channel" name="channel">
+    {% for name in channel_names %}
+      <option{% if typed.channel == name %} selected{% endif %}>{{ name }}</option>
+    {% endfor %}
+  </select>
+  <input id="forced_price" name="forced_price" aria-label="Prezzo forzato" inputmode="decimal" placeholder="99,00"
+         value="{{ typed.forced_price }}" required>
+  <button type="submit">Forza il prezzo</button>
+</form>

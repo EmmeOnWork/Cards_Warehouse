@@ -21,7 +21,7 @@
         {% for row in proposal.per_channel %}
           <tr>
             <td>{{ row.channel }}</td>
-            <td class="number">{{ row.price_cents | euros }} €</td>
+            <td class="number">{{ row.price_cents | euros }} €{% if row.forced %} <br><span class="tag">forzato</span>{% endif %}</td>
             {% if row.margin is none %}
               <td class="number" colspan="2">non calcolabile</td>
             {% else %}
@@ -47,6 +47,16 @@
     <form method="post" action="/items/{{ item.id }}/fixed-price/delete">
       <button type="submit">Togli il prezzo fissato</button>
     </form>
+  {% endif %}
+
+  {% if proposal %}
+    {% with item_id=item.id, typed=new_forced_price(), channel_names=proposal.per_channel | map(attribute="channel") %}{% include "forced_price_form.html" %}{% endwith %}
+    {# The promotion over: the channel is back at the price of the others. #}
+    {% for row in proposal.per_channel if row.forced %}
+      <form method="post" action="/items/{{ item.id }}/forced-prices/delete">
+        <button type="submit" name="channel" value="{{ row.channel }}">Togli il prezzo forzato su {{ row.channel }}</button>
+      </form>
+    {% endfor %}
   {% endif %}
 
   <h3>Prezzo di riferimento</h3>

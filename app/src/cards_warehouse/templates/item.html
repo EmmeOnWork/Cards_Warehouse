@@ -15,9 +15,12 @@
     {% endif %}
   </dl>
   {# The bulk is born from an opening, with its game and language: the edit has no kind for it. #}
+  {# The bulk is sold by weight or by lot, with its own page (task 49). #}
+  {% if item.available and not bulk %}<p><a class="button" href="/items/{{ item.id }}/sale">Vendi</a></p>{% endif %}
   <p>{% if not bulk %}<a href="/items/{{ item.id }}/edit">Modifica</a> · {% endif %}<a href="/items/{{ item.id }}/movements">Movimenti e rettifiche</a>
-    {%- if item.kind == "sealed" %} · <a href="/items/{{ item.id }}/opening">Apri in buste</a> · <a href="/items/{{ item.id }}/cards-opening">Apri in carte</a>{% endif %}
-    {%- if gradable %} · <a href="/items/{{ item.id }}/grading">Manda a gradare</a>{% endif %}</p>
+    {%- if item.kind == "sealed" %} · <a href="/items/{{ item.id }}/opening">Apri in buste</a> · <a href="/items/{{ item.id }}/cards-opening">Apri in carte</a> · <a href="/items/{{ item.id }}/mixed-opening">Apertura mista</a>{% endif %}
+    {%- if gradable %} · <a href="/items/{{ item.id }}/grading">Manda a gradare</a>{% endif %}
+    {%- if bulk %} · <a href="/items/{{ item.id }}/extraction">Estrai una carta</a>{% endif %}</p>
 
   {% if bulk %}
     <section>

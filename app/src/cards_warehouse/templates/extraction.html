@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Estrai una carta · {{ item.name }} · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>{{ item.name }}</h1>
+  <p><a href="/items/{{ item.id }}">Torna al bulk</a></p>
+
+  <section>
+    <h2>Estrai una carta</h2>
+    <p>
+      La carta esce dal lotto più vecchio del bulk, con la sua parte del costo di quel lotto e le sue stesse quote, e
+      diventa un articolo a sé.
+    </p>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form class="load" method="post" action="/items/{{ item.id }}/extraction">
+      <label for="card">Carta</label>
+      <select id="card" name="card">
+        <option value="">Una carta nuova</option>
+        {% for card in cards %}
+          <option value="{{ card.id }}"{% if form.card == card.id | string %} selected{% endif %}>{{ card.name }}</option>
+        {% endfor %}
+      </select>
+      <label for="name">Nome della carta nuova: gioco e lingua sono quelli del bulk</label>
+      <input id="name" name="name" placeholder="Charizard ex" value="{{ form.name }}">
+      <label for="set_name">Set della carta nuova, se vuoi</label>
+      <input id="set_name" name="set_name" placeholder="Evoluzioni a Paldea" value="{{ form.set_name }}">
+      <label for="number">Numero della carta nuova, se vuoi</label>
+      <input id="number" name="number" placeholder="199/193" value="{{ form.number }}">
+      <label for="condition">Condizione della carta nuova</label>
+      <select id="condition" name="condition">
+        {% for value, label in conditions.items() %}
+          <option value="{{ value }}"{% if form.condition == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <button type="submit">Estrai</button>
+    </form>
+  </section>
+{% endblock %}
