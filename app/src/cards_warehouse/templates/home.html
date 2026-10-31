@@ -3,6 +3,7 @@
 {% block content %}
   <p{% if backup.alarm %} class="error"{% endif %}>{{ backup.text }}</p>
   <p{% if check.alarm %} class="error"{% endif %}>{{ check.text }}</p>
+  {% if queue %}<p{% if queue.alarm %} class="error"{% endif %}>{{ queue.text }}</p>{% endif %}
   <h1>Magazzino</h1>
   <p><a class="button" href="/password">Cambia password</a></p>
 {% endblock %}

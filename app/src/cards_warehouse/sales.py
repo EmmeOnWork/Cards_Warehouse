@@ -2,8 +2,10 @@
 exposure what that leaves to do on the channels, and keeps the real margin it left."""
 
 from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
 
-from sqlalchemy import Column, Connection, DateTime, Integer, Table, Text, insert, select
+from sqlalchemy import Column, Connection, DateTime, Integer, Table, Text, func, insert, select, update
 
 from cards_warehouse import channels, exposure, pricing, stock
 from cards_warehouse.channels import channels as channel_rows
@@ -19,6 +21,17 @@ class NotEnoughCopies(Exception):
     def __init__(self, available: int) -> None:
         super().__init__(f"{available} copies left")
         self.available = available
+
+
+class AlreadyCancelled(Exception):
+    """The sale was undone before: its copies went back already."""
+
+
+class Cancellation(StrEnum):
+    """Why a sale was undone."""
+
+    RETURN = "return"
+    ORDER_CANCELLED = "order_cancelled"
 
 
 @dataclass(frozen=True)
@@ -40,6 +53,15 @@ class Sale:
 
 
 @dataclass(frozen=True)
+class Cancelled:
+    """A sale undone: why, when, and what Manuel noted on it."""
+
+    cause: Cancellation
+    at: datetime
+    note: str
+
+
+@dataclass(frozen=True)
 class Recorded:
     """A sale recorded, with what it left."""
 
@@ -54,6 +76,8 @@ class Recorded:
     cost_cents: int | None
     margin: Margin | None
     note: str
+    # None while the sale stands.
+    cancelled: Cancelled | None = None
 
 
 sales = Table(
@@ -69,6 +93,9 @@ sales = Table(
     Column("cost_cents", Integer),
     Column("note", Text),
     Column("created_at", DateTime(timezone=True)),
+    Column("cancellation_cause", Text),
+    Column("cancellation_note", Text),
+    Column("cancelled_at", DateTime(timezone=True)),
 )
 
 
@@ -78,9 +105,6 @@ def record(connection: Connection, sale: Sale, operations: ChannelOperations) ->
     channel = channels.one(connection, sale.channel_id)
     fee = pricing.fee(sale.price_cents, channel.fee) if sale.fee_cents is None else sale.fee_cents
     taken = _taken(connection, sale)
-    # The cost of the copies, lot by lot: with the grading in it, for a graded card. Not known if one is not.
-    costs = [None if lot.unit_cost_cents is None else lot.unit_cost_cents * copies for lot, copies in taken]
-    cost = None if None in costs else sum(costs)
     sale_id = connection.execute(
         insert(sales)
         .values(
@@ -90,15 +114,33 @@ def record(connection: Connection, sale: Sale, operations: ChannelOperations) ->
             price_cents=sale.price_cents,
             fee_cents=fee,
             shipping_cents=sale.shipping_cents,
-            cost_cents=cost,
             note=sale.note,
         )
         .returning(sales.c.id)
     ).scalar_one()
-    for lot, copies in taken:
-        stock.unload(connection, lot.id, copies, Cause.SALE, sale_id=sale_id)
+    # The cost of the copies, lot by lot: with the grading in it, for a graded card; of the bulk, the part of each lot
+    # its cards take. Not known if one is not, nor when the cards come from lots of the bulk with no cents left: no
+    # margin is worked out on nothing.
+    costs = [stock.take(connection, lot.id, copies, Cause.SALE, sale_id=sale_id).cost_cents for lot, copies in taken]
+    cost = None if None in costs else sum(costs) or None
+    connection.execute(update(sales).where(sales.c.id == sale_id).values(cost_cents=cost))
     exposure.sold(connection, sale.item_id, sale.channel_id, sale.quantity, operations)
     return sale_id
+
+
+def cancel(connection: Connection, sale_id: int, cause: Cancellation, note: str = "") -> None:
+    """The sale undone, for a return or an order cancelled: its copies go back to the lots they came from.
+    AlreadyCancelled when it was undone before: they went back then."""
+    # A second cancellation, even one at the same time, waits on the row and then finds it cancelled.
+    cancelled = connection.execute(
+        update(sales)
+        .where(sales.c.id == sale_id, sales.c.cancelled_at.is_(None))
+        .values(cancellation_cause=cause, cancellation_note=note, cancelled_at=func.now())
+        .returning(sales.c.id)
+    ).first()
+    if cancelled is None:
+        raise AlreadyCancelled(sale_id)
+    stock.restore_sale(connection, sale_id)
 
 
 def _taken(connection: Connection, sale: Sale) -> list[tuple[stock.Lot, int]]:
@@ -130,6 +172,9 @@ def one(connection: Connection, sale_id: int) -> Recorded | None:
         margin = None
     else:
         margin = pricing.margin(row.price_cents, row.fee_cents, row.cost_cents, row.shipping_cents)
+    cancelled = None
+    if row.cancelled_at is not None:
+        cancelled = Cancelled(Cancellation(row.cancellation_cause), row.cancelled_at, row.cancellation_note)
     return Recorded(
         row.id,
         row.item_id,
@@ -141,4 +186,5 @@ def one(connection: Connection, sale_id: int) -> Recorded | None:
         row.cost_cents,
         margin,
         row.note,
+        cancelled,
     )

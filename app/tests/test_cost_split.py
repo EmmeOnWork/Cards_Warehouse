@@ -8,7 +8,7 @@ import pytest
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
 
-from cards_warehouse.cost_split import TooSmallToSplit, equal_parts, in_proportion
+from cards_warehouse.cost_split import TooSmallToSplit, equal_parts, in_proportion, part_of
 
 LARGEST = 999_999_999
 
@@ -126,3 +126,10 @@ def test_an_amount_too_small_to_give_a_cent_to_each_piece_is_refused(amount, val
 def test_a_piece_estimated_below_a_cent_is_refused(values):
     with pytest.raises(ValueError, match="estimated"):
         in_proportion(10000, values)
+
+
+# Cards taken out of a lot of the bulk, 9 cards of 6,00 €: 3 of them sold take a third, 2,00 €; one extracted takes a
+# ninth, 0,67 € rounded; all 9 take it all.
+@pytest.mark.parametrize(("taken", "part"), [(3, 200), (1, 67), (9, 600)])
+def test_cards_taken_out_of_a_lot_cost_their_part_of_it_to_the_nearest_cent(taken, part):
+    assert part_of(600, 9, taken) == part

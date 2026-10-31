@@ -421,6 +421,87 @@ def test_an_action_left_on_a_listing_its_channel_closed_by_itself_leaves_the_lis
     assert exposure.one(connection, on_tilt.id).status == Status.CLOSED
 
 
+# The only copy, sold on Tilt, which closed its listing by itself, and taken off Vinted by Manuel, came back: put back
+# on both, each gets a new listing to publish, at the price there.
+def test_an_item_put_back_on_sale_where_its_listings_closed_gets_a_new_one_to_publish_on_each(connection):
+    item = a_sealed(connection, copies=1)
+    _published(connection, item, "Vinted", "Tilt")
+    _sell(connection, item, "Tilt", copies=1)
+    _do_what_is_left(connection)
+    _given_back(connection, item, copies=1)
+
+    exposure.put_back(connection, item, channel_ids(connection, "Vinted", "Tilt"), manual_channels.MANUAL)
+
+    assert _listings(connection, item) == [
+        ("Vinted", Status.TO_PUBLISH, 12000, 1),
+        ("Tilt", Status.TO_PUBLISH, 12296, 1),
+    ]
+    assert _actions(connection) == [
+        ("Vinted", ActionKind.PUBLISH, item, 12000, 1),
+        ("Tilt", ActionKind.PUBLISH, item, 12296, 1),
+    ]
+
+
+# Sold out on Tilt, the copy came back before Manuel took it off Vinted: put back there, the listing stays up, and the
+# action to close it becomes one to update it, to the copies and the price it has. Tilt, not chosen, stays closed.
+def test_an_item_put_back_on_sale_where_its_listing_was_still_to_close_keeps_it_up_with_an_update(connection):
+    item = a_sealed(connection, copies=1)
+    _published(connection, item, "Vinted", "Tilt")
+    _sell(connection, item, "Tilt", copies=1)
+    _given_back(connection, item, copies=1)
+
+    exposure.put_back(connection, item, channel_ids(connection, "Vinted"), manual_channels.MANUAL)
+
+    assert _listings(connection, item) == [("Vinted", Status.TO_UPDATE, 12000, 1)]
+    assert _actions(connection) == [("Vinted", ActionKind.UPDATE, item, 12000, 1)]
+
+
+# Two of five boxes sold on eBay, and Tilt brought down to three: the two came back. Put back on Tilt, its listing goes
+# up to the five there are; eBay, not chosen, offers three still.
+def test_an_item_put_back_on_sale_brings_a_listing_of_several_copies_up_to_those_there_are(connection):
+    item = a_sealed(connection, copies=5)
+    _published(connection, item, "Tilt", "eBay")
+    _sell(connection, item, "eBay", copies=2)
+    _do_what_is_left(connection)
+    _given_back(connection, item, copies=2)
+
+    exposure.put_back(connection, item, channel_ids(connection, "Tilt"), manual_channels.MANUAL)
+
+    assert _listings(connection, item) == [("Tilt", Status.TO_UPDATE, 12296, 5), ("eBay", Status.ACTIVE, 12000, 3)]
+    assert _actions(connection) == [("Tilt", ActionKind.UPDATE, item, 12296, 5)]
+
+
+# The only copy came back from a sale on Tilt, which closed its listing, while Vinted's was still to close. It was
+# never on eBay.
+def test_the_channels_to_put_an_item_back_on_are_those_it_was_on_and_is_off_or_about_to_be(connection):
+    item = a_sealed(connection, copies=1)
+    _published(connection, item, "Vinted", "Tilt")
+    _sell(connection, item, "Tilt", copies=1)
+    _given_back(connection, item, copies=1)
+
+    assert [channel.name for channel in exposure.to_put_back(connection, item)] == ["Vinted", "Tilt"]
+
+
+# One of five boxes came back from a sale on Tilt, whose listing is down to four: Tilt offers fewer than there are.
+# Vinted offers one copy, as it always does.
+def test_a_channel_to_put_an_item_back_on_is_one_whose_listing_offers_fewer_copies_than_came_back(connection):
+    item = a_sealed(connection, copies=5)
+    _published(connection, item, "Vinted", "Tilt")
+    _sell(connection, item, "Tilt", copies=1)
+    _given_back(connection, item, copies=1)
+
+    assert [channel.name for channel in exposure.to_put_back(connection, item)] == ["Tilt"]
+
+
+# The copy that came back was sold again: Vinted, where a listing is one copy, would get one with nothing in it.
+def test_an_item_with_no_copy_left_has_no_channel_to_be_put_back_on(connection):
+    item = a_sealed(connection, copies=1)
+    _published(connection, item, "Vinted", "Tilt")
+    _sell(connection, item, "Tilt", copies=1)
+
+    assert exposure.to_put_back(connection, item) == []
+
+
 VINTED_LINK = "https://www.vinted.it/items/5123456789-booster-box"
 
 
@@ -455,6 +536,12 @@ def _sell(connection, item: int, channel: str, copies: int) -> None:
     stock.unload(connection, lot.id, copies, Cause.SALE)
     [channel_id] = channel_ids(connection, channel)
     exposure.sold(connection, item, channel_id, copies, manual_channels.MANUAL)
+
+
+def _given_back(connection, item: int, copies: int) -> None:
+    """Copies of the item back in its lot, as a sale cancelled gives them back."""
+    [lot] = stock.lots(connection, item)
+    stock.adjust(connection, lot.id, copies, Cause.CANCELLATION)
 
 
 def _listings(connection, item: int) -> list[tuple]:

@@ -76,7 +76,7 @@ Run again, it makes nothing twice: what eBay has already is taken.
 
 ## Publishing on eBay by itself
 
-eBay stays a manual channel, with its actions in *Da fare*, until it is switched on its page: *Canali*, *eBay*, *Pubblica da sola con l'API*. *Torna manuale* switches it back. Nothing else in the app changes: the pages hand every channel's work to one object, which asks eBay's adapter (`ebay_channel.py`) for the channels switched, and leaves the rest to Manuel. Updates and closings stay actions for Manuel until tasks 34 and 35.
+eBay stays a manual channel, with its actions in *Da fare*, until it is switched on its page: *Canali*, *eBay*, *Pubblica da sola con l'API*. *Torna manuale* switches it back. Nothing else in the app changes: the pages hand every channel's work to one object, which asks eBay's adapter (`ebay_channel.py`) for the channels switched, and leaves the rest to Manuel. The adapter also lowers and closes the listings: [below](#lowering-and-closing-on-ebay-by-itself).
 
 Put on sale on eBay, a listing is published in four steps, before the item's page comes back:
 
@@ -94,6 +94,19 @@ Only single cards and sealed products are published:
 | Graded card | 183454 | `LIKE_NEW` (eBay's 2750, *Graded*), with the grader (27501: PSA 275010, BGS 275013, CGC 275015…, *Other* 2750123 for a grader eBay does not list) and the grade (27502: 10 is 275020, down in half points to 1, 2750218) |
 
 **When eBay cannot take it**, the listing stays *da pubblicare*, and the item's page says why under the listings, with *Riprova su eBay*. What the app can tell before asking eBay, it tells before: eBay not connected, the setup missing, no photo, a magazine or the bulk, a card without its condition. eBay's own refusals come in its words, in English, after *eBay rifiuta l'annuncio:*. When eBay refuses at the last step, the offer stays on eBay. *Riprova* takes it up with the values of now, for example a policy corrected in Infisical, instead of making a second one.
+
+## Lowering and closing on eBay by itself
+
+Once the channel is switched, the app brings each eBay listing down to the copies left, and ends it when none is left, in the same request that took them from the stock: a sale on Vinted or Tilt, an adjustment, an opening. A new price goes the same way.
+
+- **Lowering** (`bulkUpdatePriceQuantity`): the copies of the item, and the copies and the price of its offer, in one call. The app finds the offer from the item, `listing-<number>` (`getOffers`): it keeps only the listing's link.
+- **Closing** (`withdrawOffer`): the listing ends. eBay keeps the offer, unpublished, and the app never publishes it again: a new listing has an item of its own. A listing eBay never published has nothing to end, and closes without asking eBay.
+
+**When eBay does not answer**, with no network or with an error page of its own, the operation waits in a queue (`queued_operations`, `channel_queue.py`), and the listing stays *da aggiornare* or *da chiudere*. The item's page and *Da fare* say *in attesa di nuovo tentativo*, and the home counts them. The worker, a component of its own ([chart](../chart/README.md#the-worker)), asks eBay again 1, 2, 4, 8, 16 and 32 minutes after each try. After the last one, an hour after the sale, the operation is Manuel's: an action in *Da fare*, in red with why, and a red line on the home. He does it in eBay's app and ticks it, as on Vinted.
+
+**One operation at most waits on a listing.** A new one takes its place, and one done at once takes it away. A close that goes through while an update waits leaves nothing to send, so an old update never reaches eBay after a close. The app and the worker take the lock of the listing before asking eBay, so they never ask about the same listing at the same time.
+
+**What asking again would not fix** is Manuel's at once, with why: a refusal of eBay's, in its words, the authorization revoked, the app's keys refused, eBay not connected.
 
 ## The answers recorded
 

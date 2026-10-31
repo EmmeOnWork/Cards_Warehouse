@@ -72,6 +72,31 @@ def running_container(
         subprocess.run(["docker", "rm", "--force", container_id], check=False)
 
 
+@contextmanager
+def running_command(image: str, command: list[str], environment: dict[str, str]) -> Iterator[str]:
+    """A command of the image that runs until stopped, as the worker's container: the container's id."""
+    container_id = _docker("run", "--detach", *_in_this_pod(), *_env_flags(environment), image, *command)
+    try:
+        yield container_id
+    finally:
+        print(_docker("logs", container_id))
+        subprocess.run(["docker", "rm", "--force", container_id], check=False)
+
+
+def logged(container_id: str, line: str) -> bool:
+    """Whether the container logs the line within the startup timeout."""
+    deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if line in _docker("logs", container_id).splitlines():
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def is_running(container_id: str) -> bool:
+    return _docker("inspect", "--format", "{{.State.Running}}", container_id) == "true"
+
+
 def run_once(image: str, command: list[str], environment: dict[str, str]) -> subprocess.CompletedProcess:
     """Run a command of the image to its end, as an init container does."""
     result = subprocess.run(

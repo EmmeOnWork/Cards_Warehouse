@@ -10,6 +10,12 @@ app.kubernetes.io/name: postgres
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
+{{/* The same for the worker's pod: it serves no traffic. */}}
+{{- define "cards-warehouse.workerSelectorLabels" -}}
+app.kubernetes.io/name: worker
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
 {{/* The StatefulSet of the database and its Service, whose name is the address the app connects to. */}}
 {{- define "cards-warehouse.postgresName" -}}
 {{ .Release.Name }}-postgres

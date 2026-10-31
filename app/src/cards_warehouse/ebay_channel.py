@@ -8,6 +8,8 @@ offer is published, which makes it a listing.
 """
 
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -16,7 +18,7 @@ from sqlalchemy import Connection
 
 from cards_warehouse import items, listing_texts, photos
 from cards_warehouse.ebay import Account, AuthorizationRefused, EbayUnavailable, RequestRefused
-from cards_warehouse.exposure import Listing, PublishRefused
+from cards_warehouse.exposure import ChannelUnavailable, Listing, OperationRefused, PublishRefused, Status
 from cards_warehouse.items import Card, Condition, Item, Kind
 
 MARKETPLACE = "EBAY_IT"
@@ -129,12 +131,55 @@ class EbayChannel:
                 "controlla EBAY_CLIENT_ID e EBAY_CLIENT_SECRET in Infisical, poi riprova."
             ) from None
 
+    def update(self, connection: Connection, listing: Listing) -> bool:
+        """The listing on eBay at its price and copies, at once: the item's copies and the offer's, in one call.
+        ChannelUnavailable when eBay does not answer."""
+        sku = _sku(listing)
+        with self._changing():
+            self._send(
+                "POST",
+                self._account.api("/sell/inventory/v1/bulk_update_price_quantity"),
+                json={
+                    "requests": [
+                        {
+                            "sku": sku,
+                            "shipToLocationAvailability": {"quantity": listing.quantity},
+                            "offers": [
+                                {
+                                    "offerId": self._offer_of(sku),
+                                    "availableQuantity": listing.quantity,
+                                    "price": {"value": _value(listing.price_cents), "currency": "EUR"},
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+        return True
+
+    def close(self, connection: Connection, listing: Listing) -> bool:
+        """The listing off eBay, at once: its offer withdrawn, which ends the listing. eBay keeps the offer,
+        unpublished, and the app never publishes it again: a new listing has an item of its own. One eBay refused is
+        not on eBay, and has nothing to end. ChannelUnavailable when eBay does not answer."""
+        if listing.status == Status.TO_PUBLISH:
+            return True
+        with self._changing():
+            offer_id = self._offer_of(_sku(listing))
+            self._send("POST", self._account.api(f"/sell/inventory/v1/offer/{offer_id}/withdraw"))
+        return True
+
+    def _offer_of(self, sku: str) -> str:
+        """The offer of the item on eBay Italy: the app keeps only the listing's link, eBay finds the offer by item."""
+        found = self._send(
+            "GET", self._account.api("/sell/inventory/v1/offer"), params={"sku": sku, "marketplace_id": MARKETPLACE}
+        ).json()
+        return found["offers"][0]["offerId"]
+
     def _published(
         self, listing: Listing, texts: listing_texts.Texts, category: str, condition: dict, links: list[str]
     ) -> str:
         images = [self._hosted(link) for link in links]
-        # One item on eBay for each listing of the app: a listing closed and opened again starts clean.
-        sku = f"listing-{listing.id}"
+        sku = _sku(listing)
         self._send(
             "PUT",
             self._account.api(f"/sell/inventory/v1/inventory_item/{sku}"),
@@ -187,6 +232,35 @@ class EbayChannel:
 
     def _send(self, method: str, url: str, **options) -> httpx.Response:
         return _checked(self._account.request(method, url, headers=TEXTS_LANGUAGE, **options))
+
+    @contextmanager
+    def _changing(self) -> Iterator[None]:
+        """What goes wrong with an update or a close, as the exposure understands it: ChannelUnavailable when eBay
+        does not answer, and the same can be asked again later; OperationRefused, with why and what to do, when eBay
+        would refuse it again."""
+        if self._account is None:
+            raise OperationRefused("eBay non è collegato: collegalo dal PC con make ebay-connect.")
+        try:
+            yield
+        except EbayUnavailable:
+            raise ChannelUnavailable from None
+        except AuthorizationRefused:
+            raise OperationRefused(
+                "eBay non accetta più l'autorizzazione: ricollega l'account dal PC con make ebay-connect."
+            ) from None
+        except RequestRefused as refusal:
+            raise OperationRefused(
+                f"eBay rifiuta le chiavi dell'app ({refusal}): "
+                "controlla EBAY_CLIENT_ID e EBAY_CLIENT_SECRET in Infisical."
+            ) from None
+        # What eBay refuses, in eBay's words, as for a listing to publish.
+        except PublishRefused as refusal:
+            raise OperationRefused(str(refusal)) from None
+
+
+def _sku(listing: Listing) -> str:
+    """One item on eBay for each listing of the app: a listing closed and opened again starts clean."""
+    return f"listing-{listing.id}"
 
 
 def _checked(response: httpx.Response) -> httpx.Response:

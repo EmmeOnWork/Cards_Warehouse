@@ -8,7 +8,8 @@
 
   <section>
     <h2>Vendi</h2>
-    <p>Copie disponibili: {{ item.available }}</p>
+    {% set bulk = item.kind == "bulk" %}
+    <p>{% if bulk %}Carte nel bulk{% else %}Copie disponibili{% endif %}: {{ item.available }}</p>
     {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
     <form method="post" action="/items/{{ item.id }}/sales" id="sale">
       <p>Canale</p>
@@ -22,8 +23,17 @@
         </label>
       {% endfor %}
 
-      <label for="quantity">Copie</label>
-      <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" value="{{ form.quantity }}" required>
+      {% if bulk %}
+        {# Sold by weight or by lot: the cards it comes to, by eye. #}
+        <label for="quantity">Carte, anche a occhio</label>
+        <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" value="{{ form.quantity }}">
+        <label class="check">
+          <input type="checkbox" name="everything" value="yes"{% if form.everything %} checked{% endif %}> Tutto il bulk, quante che siano
+        </label>
+      {% else %}
+        <label for="quantity">Copie</label>
+        <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" value="{{ form.quantity }}" required>
+      {% endif %}
 
       <label for="price">Prezzo incassato, per tutte le copie</label>
       <input id="price" name="price" inputmode="decimal" placeholder="19,99" value="{{ form.price }}" required>
@@ -48,7 +58,7 @@
       {% endif %}
 
       <label for="note">Nota, se vuoi</label>
-      <input id="note" name="note" placeholder="Prezzo di favore, cliente fisso" value="{{ form.note }}">
+      <input id="note" name="note" placeholder="{% if bulk %}A peso: 1 kg{% else %}Prezzo di favore, cliente fisso{% endif %}" value="{{ form.note }}">
 
       <button type="submit">Registra la vendita</button>
     </form>

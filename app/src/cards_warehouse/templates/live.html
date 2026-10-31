@@ -52,6 +52,88 @@
     {% endif %}
   {% endif %}
 
+  {# At the end of the live: the copies sold of each item, a row for each price. Kept until confirmed, so an entry
+     left halfway is finished later. #}
+  {% if rows %}
+    <section>
+      <h2>Venduto in live</h2>
+      {% if entered %}
+        <form method="post" action="/lives/{{ inventory_id }}/unsold">
+          <table>
+            <thead>
+              <tr><th>Articolo</th><th class="number">Copie</th><th class="number">A copia</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for row in entered %}
+                <tr>
+                  <td>{{ row.name }}</td>
+                  <td class="number">{{ row.quantity }}</td>
+                  <td class="number">{{ row.unit_price_cents | euros }} €</td>
+                  {# Once confirmed, a row is a sale: it no longer comes off here. #}
+                  <td>
+                    {% if row.sale_id %}<a href="/sales/{{ row.sale_id }}">Venduta</a>
+                    {% else %}<button name="row_id" value="{{ row.id }}" aria-label="Togli la riga {{ loop.index }}">Togli</button>{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </form>
+      {% endif %}
+      {% if sold_error %}<p class="error" role="alert">{{ sold_error }}</p>{% endif %}
+      <form method="post" action="/lives/{{ inventory_id }}/sold">
+        <label for="item_id">Articolo</label>
+        <select id="item_id" name="item_id">
+          {% for row in rows %}
+            <option value="{{ row.item_id }}"{% if sold_form.item_id == row.item_id | string %} selected{% endif %}>{{ row.name }}</option>
+          {% endfor %}
+        </select>
+        <label for="quantity">Copie</label>
+        <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" value="{{ sold_form.quantity }}" required>
+        <label for="price">Prezzo di una copia</label>
+        <input id="price" name="price" inputmode="decimal" placeholder="8,50" value="{{ sold_form.price }}" required>
+        <button type="submit">Aggiungi riga</button>
+      </form>
+      {% if entered | rejectattr("sale_id") | list %}
+        <form method="post" action="/lives/{{ inventory_id }}/confirm">
+          <button type="submit">Conferma vendite</button>
+        </form>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  {% if report.sold %}
+    <section>
+      <h2>Resoconto</h2>
+      <dl>
+        <dt>Incasso</dt><dd>{{ report.takings_cents | euros }} €</dd>
+        <dt>Commissioni</dt><dd>{{ report.fees_cents | euros }} €</dd>
+        <dt>Margine</dt>
+        <dd>{% if report.margin is none %}non calcolabile{% else %}{{ report.margin.cents | euros }} € · {{ report.margin.percent | percent }} %{% endif %}</dd>
+      </dl>
+      {# In the takings and the fees, but no margin can be told of them. #}
+      {% if report.cost_not_known == 1 %}
+        <p>1 vendita a costo sconosciuto, esclusa dal margine.</p>
+      {% elif report.cost_not_known %}
+        <p>{{ report.cost_not_known }} vendite a costo sconosciuto, escluse dal margine.</p>
+      {% endif %}
+      <table>
+        <thead>
+          <tr><th>Articolo</th><th class="number">Copie</th><th class="number">Incasso</th></tr>
+        </thead>
+        <tbody>
+          {% for item in report.sold %}
+            <tr>
+              <td>{{ item.name }}</td>
+              <td class="number">{{ item.copies }}</td>
+              <td class="number">{{ item.takings_cents | euros }} €</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
   <h2>Salva come configurazione</h2>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/lives/{{ inventory_id }}/preset">

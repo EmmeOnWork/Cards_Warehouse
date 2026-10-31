@@ -3,9 +3,11 @@
 Runs inside the dev container (make test), which drives the PC's Docker through its socket.
 """
 
+import time
+
 import pytest
 
-from tests.acceptance.containers import built_image, run_once, running_container
+from tests.acceptance.containers import built_image, is_running, logged, run_once, running_command, running_container
 from tests.schema import head_revision, schema_revision
 
 pytestmark = pytest.mark.acceptance
@@ -20,6 +22,19 @@ def test_image_migrates_an_empty_database_then_the_app_answers_ready(empty_datab
         assert schema_revision(empty_database) == head_revision()
         with running_container(image, environment=empty_database) as client:
             assert client.get("/readyz").status_code == 200
+
+
+# The worker's pod: the same image, with the database and the bucket's name only, as the chart gives them, and eBay
+# not connected yet. It starts, and is still there after its first round: one that failed would have stopped it.
+def test_image_runs_the_worker_on_the_database_alone(empty_database):
+    with built_image() as image:
+        run_once(image, ["python", "-m", "cards_warehouse.migrate"], empty_database)
+        environment = {**empty_database, "PHOTOS_BUCKET": "test-photos", "PHOTOS_REGION": "eu-north-1"}
+
+        with running_command(image, ["python", "-m", "cards_warehouse.worker"], environment) as worker:
+            assert logged(worker, "The worker looks for operations to ask again every 30 s.")
+            time.sleep(2)
+            assert is_running(worker)
 
 
 # Ready only with a database: the readiness probe asks it.

@@ -10,7 +10,7 @@
     <h2>Vendita</h2>
     <dl>
       <dt>Canale</dt><dd>{{ sale.channel }}</dd>
-      <dt>Copie</dt><dd>{{ sale.quantity }}</dd>
+      <dt>{% if bulk %}Carte{% else %}Copie{% endif %}</dt><dd>{{ sale.quantity }}</dd>
       <dt>Prezzo</dt><dd>{{ sale.price_cents | euros }} €</dd>
       <dt>Commissione</dt><dd>{{ sale.fee_cents | euros }} €</dd>
       <dt>Spedizione</dt><dd>{{ sale.shipping_cents | euros }} €</dd>
@@ -21,6 +21,30 @@
       {% if sale.note %}<dt>Nota</dt><dd>{{ sale.note }}</dd>{% endif %}
     </dl>
   </section>
+
+  {% if sale.cancelled %}
+    <section>
+      <h2>Annullamento</h2>
+      <dl>
+        <dt>Causa</dt><dd>{{ cancellation_causes[sale.cancelled.cause] }}</dd>
+        <dt>Data</dt><dd>{{ sale.cancelled.at | day }}</dd>
+        {% if sale.cancelled.note %}<dt>Nota</dt><dd>{{ sale.cancelled.note }}</dd>{% endif %}
+      </dl>
+    </section>
+
+    {# The copies are back: on sale again where the item was, if Manuel wants it there. #}
+    {% if to_put_back %}
+      <section>
+        <h2>Rimetti in vendita</h2>
+        <form method="post" action="/sales/{{ sale.id }}/put-back">
+          {% for channel in to_put_back %}
+            <label class="check"><input type="checkbox" name="channel" value="{{ channel.id }}" checked> {{ channel.name }}</label>
+          {% endfor %}
+          <button type="submit">Rimetti in vendita</button>
+        </form>
+      </section>
+    {% endif %}
+  {% endif %}
 
   {# Right after the sale: where the item is offered still, with copies no longer there. #}
   <section>
@@ -35,4 +59,25 @@
       <p>Niente da fare: ogni annuncio offre solo le copie rimaste.</p>
     {% endif %}
   </section>
+
+  {# A return, or an order cancelled: the copies go back to their lots. #}
+  {% if not sale.cancelled %}
+    <section>
+      <h2>Annulla la vendita</h2>
+      {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="/sales/{{ sale.id }}/cancellation">
+        <p>Causa</p>
+        {% for cause, label in cancellation_causes.items() %}
+          <label class="check">
+            <input type="radio" name="cause" value="{{ cause }}" required{% if form.cause == cause %} checked{% endif %}> {{ label }}
+          </label>
+        {% endfor %}
+
+        <label for="cancellation-note">Nota, se vuoi</label>
+        <input id="cancellation-note" name="note" placeholder="Arrivata piegata" value="{{ form.note }}">
+
+        <button type="submit">Annulla la vendita</button>
+      </form>
+    </section>
+  {% endif %}
 {% endblock %}

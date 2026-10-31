@@ -10,8 +10,9 @@ import pytest
 
 from cards_warehouse import ebay, exposure, items, photos, stock
 from cards_warehouse.ebay_channel import EbayChannel, SellerSetup
-from cards_warehouse.exposure import Status
+from cards_warehouse.exposure import ChannelUnavailable, OperationRefused, Status
 from cards_warehouse.items import Card, Condition, Grading, Item, Kind
+from cards_warehouse.stock import Cause
 from tests.fake_ebay import LOCATION_KEY, PAYMENT_POLICY_ID, RETURN_POLICY_ID, FakeEbay
 from tests.test_access import FakeClock
 from tests.test_ebay import connect_account
@@ -72,6 +73,70 @@ def test_without_a_photo_the_listing_stays_to_publish_with_the_reason_and_ebay_g
     assert fake_ebay.requests_to_sell == 0
 
 
+# Refused for the photo, so never on eBay: the last box sold on Vinted closes it with nothing to end there.
+def test_a_listing_never_published_on_ebay_closes_at_once_without_asking_ebay(connection, photos, monkeypatch):
+    fake_ebay = FakeEbay(photos=photos.open)
+    channel = ebay_channel(monkeypatch, fake_ebay, photos)
+    box = items.add(connection, BOX)
+    stock.load(connection, box, quantity=1, unit_cost_cents=10000)
+    exposure.put_on_sale(connection, box, channel_ids(connection, "eBay"), channel)
+
+    [lot] = stock.lots(connection, box)
+    stock.unload(connection, lot.id, 1, Cause.SALE)
+    exposure.sold(connection, box, *channel_ids(connection, "Vinted"), 1, channel)
+
+    assert exposure.of_item(connection, box) == []
+    assert fake_ebay.requests_to_sell == 0
+
+
+# eBay that does not answer, or answers with an error page of its own: the same call can be sent again later.
+@pytest.mark.parametrize("outage", ["unreachable", "broken"])
+def test_an_update_or_a_close_ebay_does_not_answer_can_be_asked_again_later(connection, photos, monkeypatch, outage):
+    fake_ebay = FakeEbay(photos=photos.open)
+    channel = ebay_channel(monkeypatch, fake_ebay, photos)
+    box = a_photographed(connection, photos, BOX, copies=2)
+    exposure.put_on_sale(connection, box, channel_ids(connection, "eBay"), channel)
+    [listing] = exposure.of_item(connection, box)
+    fake_ebay.fail(outage)
+
+    with pytest.raises(ChannelUnavailable):
+        channel.update(connection, listing)
+    with pytest.raises(ChannelUnavailable):
+        channel.close(connection, listing)
+
+
+# What asking again would not fix, with what to do: the update or the close is Manuel's at once.
+@pytest.mark.parametrize(
+    ("trouble", "reason"),
+    [
+        ("removed by hand", "eBay rifiuta l'annuncio: This Offer is not available."),
+        ("revoked", "eBay non accetta più l'autorizzazione: ricollega l'account dal PC con make ebay-connect."),
+        (
+            "wrong keys",
+            "eBay rifiuta le chiavi dell'app (invalid_client): "
+            "controlla EBAY_CLIENT_ID e EBAY_CLIENT_SECRET in Infisical.",
+        ),
+        ("not connected", "eBay non è collegato: collegalo dal PC con make ebay-connect."),
+    ],
+)
+def test_an_update_or_a_close_ebay_would_refuse_again_says_why(connection, photos, monkeypatch, trouble, reason):
+    fake_ebay = FakeEbay(photos=photos.open)
+    box = a_photographed(connection, photos, BOX, copies=2)
+    exposure.put_on_sale(connection, box, channel_ids(connection, "eBay"), ebay_channel(monkeypatch, fake_ebay, photos))
+    [listing] = exposure.of_item(connection, box)
+    CHANGE_TROUBLES[trouble](monkeypatch, fake_ebay)
+    # Started after the trouble, as the pod is after a change in Infisical: no short-lived token from before.
+    account = ebay.account_from_environment(fake_ebay.http(), FakeClock())
+    channel = EbayChannel(account, SellerSetup.from_environment(), photos)
+
+    with pytest.raises(OperationRefused) as update:
+        channel.update(connection, listing)
+    with pytest.raises(OperationRefused) as close:
+        channel.close(connection, listing)
+
+    assert (str(update.value), str(close.value)) == (reason, reason)
+
+
 def test_a_refused_listing_asked_again_once_the_reason_is_gone_is_published(connection, photos, monkeypatch):
     fake_ebay = FakeEbay(photos=photos.open)
     channel = ebay_channel(monkeypatch, fake_ebay, photos)
@@ -130,6 +195,16 @@ TROUBLES = {
     "wrong keys": lambda monkeypatch, fake_ebay: monkeypatch.setenv("EBAY_CLIENT_SECRET", "a-mistyped-secret"),
     "not connected": lambda monkeypatch, fake_ebay: monkeypatch.delenv("EBAY_REFRESH_TOKEN"),
     "not set up": lambda monkeypatch, fake_ebay: monkeypatch.delenv("EBAY_LOCATION_KEY"),
+}
+
+
+# What goes wrong with a listing live on eBay, for an update or a close.
+CHANGE_TROUBLES = {
+    # Deleted by Manuel from eBay's Seller Hub, offer and all.
+    "removed by hand": lambda monkeypatch, fake_ebay: fake_ebay.remove_by_hand(),
+    "revoked": TROUBLES["revoked"],
+    "wrong keys": TROUBLES["wrong keys"],
+    "not connected": TROUBLES["not connected"],
 }
 
 

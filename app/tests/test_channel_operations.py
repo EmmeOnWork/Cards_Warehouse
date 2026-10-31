@@ -23,7 +23,7 @@ def test_a_channel_set_to_publish_through_its_api_is_published_by_the_app_and_th
     assert list(manual_channels.pending(connection)) == ["Tilt"]
 
 
-# eBay's adapter publishes, and from tasks 34 and 35 it updates and closes too: until then those are left to Manuel.
+# As eBay's adapter in task 33, which published and did nothing else yet: what it cannot do is left to Manuel.
 def test_an_operation_the_adapter_cannot_do_yet_is_left_to_manuel_as_an_action(connection):
     item = a_sealed(connection, copies=1)
     [ebay] = channel_ids(connection, "eBay")

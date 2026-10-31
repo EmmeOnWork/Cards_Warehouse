@@ -75,39 +75,33 @@ def test_a_listing_put_on_sale_is_active_at_its_link_once_what_the_channel_leave
     assert listing.link.startswith("https://")
 
 
-# Lowering and closing a listing: eBay's API joins with task 34, until then its listings are lowered and closed by
-# Manuel, through the actions.
-@pytest.fixture(params=[_Manual, _InMemory], ids=["manual", "in memory"])
-def lowering_channel(request, monkeypatch, photos):
-    return request.param(monkeypatch, photos)
-
-
-# One of two copies sold where the item is not listed, such as to a friend: Tilt's listing offers the one left.
+# One of two copies sold on Vinted: Tilt's listing offers the one left.
 def test_a_listing_offering_more_copies_than_are_left_offers_those_left_once_what_the_channel_leaves_to_do_is_done(
-    connection, lowering_channel
+    connection, channel, photos
 ):
-    item = _listed_on_tilt(connection, lowering_channel, copies=2)
+    item = _listed_on_tilt(connection, channel, photos, copies=2)
 
-    _sold_on_vinted(connection, item, lowering_channel, copies=1)
-    lowering_channel.do_what_is_left(connection)
+    _sold_on_vinted(connection, item, channel, copies=1)
+    channel.do_what_is_left(connection)
 
     [listing] = exposure.of_item(connection, item)
     assert (listing.status, listing.quantity) == (Status.ACTIVE, 1)
 
 
 def test_a_listing_whose_copies_are_all_sold_is_off_its_channel_once_what_the_channel_leaves_to_do_is_done(
-    connection, lowering_channel
+    connection, channel, photos
 ):
-    item = _listed_on_tilt(connection, lowering_channel, copies=2)
+    item = _listed_on_tilt(connection, channel, photos, copies=2)
 
-    _sold_on_vinted(connection, item, lowering_channel, copies=2)
-    lowering_channel.do_what_is_left(connection)
+    _sold_on_vinted(connection, item, channel, copies=2)
+    channel.do_what_is_left(connection)
 
     assert exposure.of_item(connection, item) == []
 
 
-def _listed_on_tilt(connection, channel, copies: int) -> int:
-    item = a_sealed(connection, copies)
+# The same calls as for a listing on eBay: the channel's adapter does not look at the channel's name.
+def _listed_on_tilt(connection, channel, store, copies: int) -> int:
+    item = a_photographed_sealed(connection, store, copies)
     exposure.put_on_sale(connection, item, channel_ids(connection, "Tilt"), channel.operations)
     channel.do_what_is_left(connection)
     return item

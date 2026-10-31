@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Capitale fermo nel bulk</h1>
+  <p>Quanto costano le carte di ogni bulk, e da quando è fermo il suo lotto più vecchio: le vendite partono da quello.</p>
+  {% if standing %}
+    <table>
+      <thead>
+        <tr><th>Bulk</th><th class="number">Carte</th><th class="number">Capitale</th><th>Fermo dal</th><th class="number">Giorni</th></tr>
+      </thead>
+      <tbody>
+        {% for idle, days in standing %}
+          <tr>
+            <td><a href="/items/{{ idle.item_id }}">{{ idle.name }}</a></td>
+            <td class="number">{{ idle.cards }}</td>
+            <td class="number">{% if idle.cost_cents is none %}sconosciuto{% else %}{{ idle.cost_cents | euros }} €{% endif %}</td>
+            <td>{{ idle.since | day }}</td>
+            <td class="number">{{ days }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Nessun bulk ha carte: niente capitale fermo.</p>
+  {% endif %}
+{% endblock %}

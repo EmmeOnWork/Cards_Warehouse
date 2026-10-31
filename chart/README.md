@@ -1,6 +1,6 @@
 # chart
 
-Helm chart that packages the application for Kubernetes: a Deployment, a NodePort Service, PostgreSQL, the CronJob of the daily check, and the two resources of the Infisical operator that bring the app its secrets:
+Helm chart that packages the application for Kubernetes: a Deployment, a NodePort Service, PostgreSQL, the CronJob of the daily check, the Deployment of the worker, and the two resources of the Infisical operator that bring the app its secrets:
 
 - `InfisicalAuth`: signs in to Infisical as the cluster's machine identity, with the credential Terraform puts in the `infisical` namespace;
 - `InfisicalStaticSecret`: copies two folders of Infisical, the app's `/app` and `/aws`, into the Secret `cards-warehouse-secrets`, which it owns, and reads them again every minute.
@@ -17,6 +17,15 @@ A CronJob, `cards-warehouse-daily-check`, runs every day at 07:00 in Italian tim
 - **Never two at once** (`concurrencyPolicy: Forbid`), and two more tries when the database does not answer (`backoffLimit: 2`). Something found is not a failure: the Job succeeds, and its log is the line of the home page.
 - **The database only.** Its pod gets the libpq variables and `PGPASSWORD`, none of the app's other secrets, and no Kubernetes API token.
 - **By hand**, the same check runs from the button *Controlla adesso* of the page, inside the app. The CronJob itself, from `make shell`: `kubectl -n cards-warehouse create job --from cronjob/cards-warehouse-daily-check daily-check-by-hand`, as [its test](../infra/platform/tests/daily-check.sh) does.
+
+## The worker
+
+A Deployment, `cards-warehouse-worker`, runs the same image as the app, at the same commit: `python -m cards_warehouse.worker`. Every 30 s it asks eBay again the updates and the closes eBay did not answer when the app asked, and after an hour leaves them to Manuel ([docs/ebay.md](../docs/ebay.md#lowering-and-closing-on-ebay-by-itself)).
+
+- **A component of its own.** Its pods have the label `app.kubernetes.io/name: worker`, so the app's Service never sends them traffic. It has no probe, since it serves nothing. When it stops, because the database does not answer or is behind a migration the app's pod has not run yet, Kubernetes starts it again after a pause.
+- **One at a time** (`replicas: 1`, `strategy: Recreate`). Two would still never send an operation twice: each takes the lock of its listing, and skips one already locked.
+- **The database and eBay only.** Its pod gets the libpq variables, `PGPASSWORD` and the eBay values of `optionalSecrets`: no session key, no password, no AWS key, no Kubernetes API token. The bucket's name is there because eBay's adapter is built with it, but the worker never publishes and asks AWS nothing. When an eBay value changes in Infisical, the operator restarts it, as it does the app.
+- **Its test**, with the platform up, after the push that brought it: `bash infra/platform/tests/worker.sh` inside `make shell`.
 
 ## Photos
 

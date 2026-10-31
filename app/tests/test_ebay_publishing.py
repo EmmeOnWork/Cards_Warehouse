@@ -22,8 +22,8 @@ pytestmark = pytest.mark.usefixtures("database")
 def test_an_item_put_on_sale_on_ebay_is_published_there_by_the_app_and_leaves_manuel_nothing_to_do(monkeypatch):
     photos = FakePhotoStore()
     fake_ebay = FakeEbay(photos=photos.open)
-    client = _signed_in(monkeypatch, fake_ebay, photos)
-    _publish_through_the_api(client, "eBay")
+    client = signed_in_selling_on_ebay(monkeypatch, fake_ebay, photos)
+    publish_through_the_api(client, "eBay")
 
     item_page = client.post("/items", data=BOOSTER_BOX).url.path
     client.post(f"{item_page}/photos", files=[("photos", ("IMG_1.JPG", FRONT, "image/jpeg"))])
@@ -50,8 +50,8 @@ def test_an_item_put_on_sale_on_ebay_is_published_there_by_the_app_and_leaves_ma
 def test_a_listing_ebay_refuses_stays_to_publish_with_the_reason_and_is_published_once_fixed(monkeypatch):
     photos = FakePhotoStore()
     fake_ebay = FakeEbay(photos=photos.open)
-    client = _signed_in(monkeypatch, fake_ebay, photos)
-    _publish_through_the_api(client, "eBay")
+    client = signed_in_selling_on_ebay(monkeypatch, fake_ebay, photos)
+    publish_through_the_api(client, "eBay")
     item_page = client.post("/items", data=BOOSTER_BOX).url.path
     put_on_sale, _ = buttons(client.get(item_page).text)["Metti in vendita"]
     client.post(put_on_sale, data={"channel": checkboxes(client.get(item_page).text, "channel")["eBay"]})
@@ -80,7 +80,7 @@ def set_up_selling(monkeypatch) -> None:
     monkeypatch.setenv("EBAY_LOCATION_KEY", LOCATION_KEY)
 
 
-def _signed_in(monkeypatch, fake_ebay: FakeEbay, photos: FakePhotoStore) -> TestClient:
+def signed_in_selling_on_ebay(monkeypatch, fake_ebay: FakeEbay, photos: FakePhotoStore) -> TestClient:
     connect_account(monkeypatch)
     set_up_selling(monkeypatch)
     client = TestClient(create_app(ebay_http=fake_ebay.http(), photo_store=photos))
@@ -88,7 +88,7 @@ def _signed_in(monkeypatch, fake_ebay: FakeEbay, photos: FakePhotoStore) -> Test
     return client
 
 
-def _publish_through_the_api(client: TestClient, channel: str) -> None:
+def publish_through_the_api(client: TestClient, channel: str) -> None:
     """From the channel's page, the setting that makes the app publish there by itself."""
     channel_page = client.get(links(client.get("/channels").text)[channel]).text
     switch, fields = buttons(channel_page)["Pubblica da sola con l'API"]

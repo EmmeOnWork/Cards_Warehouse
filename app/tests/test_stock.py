@@ -11,6 +11,8 @@ from cards_warehouse import items, stock
 from cards_warehouse.database import create_database_engine
 from cards_warehouse.items import Item, Kind
 from cards_warehouse.stock import Cause, NotEnoughStock
+from tests.test_extractions import bulk_lot
+from tests.test_openings import bulk_of
 
 
 def test_a_load_makes_its_copies_available(connection):
@@ -64,6 +66,18 @@ def test_an_unload_then_its_restore_bring_the_stock_back_to_where_it_was(connect
     assert stock.available(connection, item) == 3
     # All three are in that same lot again: unloading them raises nothing.
     stock.unload(connection, lot, quantity=3, cause=Cause.SALE)
+
+
+# A card of the bulk takes its part of the lot's cost with it: given back, the lot has its cost again.
+def test_a_restore_gives_the_bulk_back_the_cost_that_left_with_its_card(connection):
+    bulk_lot(connection, cards=4, cost_cents=600)
+    bulk = bulk_of(connection)
+    before = stock.lots(connection, bulk)
+    taken = stock.take_from_bulk(connection, bulk)
+
+    stock.restore(connection, taken.movement_id)
+
+    assert stock.lots(connection, bulk) == before
 
 
 # Zero is not how a cost not known is said: that is None, which the margins will leave out.

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from cards_warehouse import exposure, items, listing_texts, manual_channels, photos
+from cards_warehouse import channel_queue, exposure, items, listing_texts, manual_channels, photos
 from cards_warehouse.exposure import NoPrice, NothingToSell, Status
 from cards_warehouse.manual_channels import ActionKind
 from cards_warehouse.pages import templates
@@ -43,12 +43,17 @@ def put_on_sale(request: Request, item_id: int, form: Annotated[PutOnSaleForm, F
     try:
         with request.app.state.engine.begin() as connection:
             exposure.put_on_sale(connection, item_id, form.channel, request.app.state.channel_operations)
-    except NothingToSell:
+    except (NothingToSell, NoPrice) as refusal:
+        return refused(request, item_id, refusal)
+    return RedirectResponse(f"/items/{item_id}", status_code=303)
+
+
+def refused(request: Request, item_id: int, refusal: NothingToSell | NoPrice):
+    """The page that tells Manuel why the item could not be put on sale."""
+    if isinstance(refusal, NothingToSell):
         reason = "Non ci sono copie disponibili da mettere in vendita."
-    except NoPrice:
-        reason = "Il costo è sconosciuto e non c'è un prezzo fissato: fissa il prezzo, poi mettilo in vendita."
     else:
-        return RedirectResponse(f"/items/{item_id}", status_code=303)
+        reason = "Il costo è sconosciuto e non c'è un prezzo fissato: fissa il prezzo, poi mettilo in vendita."
     return templates.TemplateResponse(
         request, "listing_refused.html", {"reason": reason, "item_id": item_id}, status_code=422
     )
@@ -79,12 +84,13 @@ def withdraw(request: Request, listing_id: int):
 def action_list(request: Request):
     with request.app.state.engine.connect() as connection:
         by_channel = manual_channels.pending(connection)
-        names = {
-            action.listing.item_id: items.get(connection, action.listing.item_id).name
-            for actions in by_channel.values()
-            for action in actions
-        }
-    return templates.TemplateResponse(request, "actions.html", {"by_channel": by_channel, "names": names})
+        waiting = channel_queue.pending(connection)
+        listings = [action.listing for actions in by_channel.values() for action in actions]
+        listings += [operation.listing for operation in waiting]
+        names = {listing.item_id: items.get(connection, listing.item_id).name for listing in listings}
+    return templates.TemplateResponse(
+        request, "actions.html", {"by_channel": by_channel, "waiting": waiting, "names": names}
+    )
 
 
 @router.get("/actions/{action_id}")

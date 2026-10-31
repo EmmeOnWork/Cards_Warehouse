@@ -53,6 +53,15 @@ class PublishRefused(Exception):
     """The channel did not take the listing. The message says why, for Manuel, and what to do about it."""
 
 
+class ChannelUnavailable(Exception):
+    """The channel did not answer, and did nothing: the same can be asked of it again later."""
+
+
+class OperationRefused(Exception):
+    """The channel refused to update or close the listing, and would refuse it again. The message says why, for
+    Manuel."""
+
+
 class ChannelOperations(Protocol):
     """What the app asks of a channel: the same of a manual one, which leaves it to Manuel, and of one the app
     acts on through its API. The rest of the app does not know which one it asks."""
@@ -89,6 +98,48 @@ def put_on_sale(
     """A listing of the item on each channel chosen, at the price proposed there, published through `operations`.
     A channel where the item is listed already is left as it is. NothingToSell when no copy is left, NoPrice when
     the item has no price: nothing is offered anywhere."""
+    for channel, price, quantity in _offers(connection, item_id, channel_ids):
+        _list(connection, item_id, channel.id, price, quantity, operations)
+
+
+def put_back(connection: Connection, item_id: int, channel_ids: Collection[int], operations: ChannelOperations) -> None:
+    """The item on sale again on the channels chosen, with the copies it has, after some came back to it, as from a
+    sale cancelled. A listing on a channel is brought to them and to the price there, even one Manuel was still to
+    close, which is on its channel still; where none is, a new one is published. NothingToSell and NoPrice as when
+    the item is put on sale."""
+    listed = {listing.channel: listing for listing in of_item(connection, item_id)}
+    for channel, price, quantity in _offers(connection, item_id, channel_ids):
+        listing = listed.get(channel.name)
+        if listing is None:
+            _list(connection, item_id, channel.id, price, quantity, operations)
+        elif listing.status == Status.TO_CLOSE or (listing.price_cents, listing.quantity) != (price, quantity):
+            _change(connection, listing, operations, price_cents=price, quantity=quantity)
+
+
+def to_put_back(connection: Connection, item_id: int) -> list[channels.Channel]:
+    """The channels the item was on sale on and that no longer offer the copies it has, in their order: off it, about
+    to be, or with fewer copies. Where a sale cancelled may put it back. None when no copy is left."""
+    left = stock.available(connection, item_id)
+    if left == 0:
+        return []
+    were = set(connection.execute(select(listings.c.channel_id).where(listings.c.item_id == item_id)).scalars())
+    # A listing about to close offers nothing.
+    offering = {
+        listing.channel: listing.quantity
+        for listing in of_item(connection, item_id)
+        if listing.status != Status.TO_CLOSE
+    }
+    return [
+        channel
+        for channel in channels.every(connection)
+        if channel.id in were and offering.get(channel.name, 0) < _offered(channel, left)
+    ]
+
+
+def _offers(
+    connection: Connection, item_id: int, channel_ids: Collection[int]
+) -> list[tuple[channels.Channel, int, int]]:
+    """What the item offers on each channel chosen, in the channels' order: its price there, and its copies."""
     available = stock.available(connection, item_id)
     if available < 1:
         raise NothingToSell(item_id)
@@ -96,10 +147,11 @@ def put_on_sale(
     if proposal is None:
         raise NoPrice(item_id)
     prices = dict(proposal.prices)
-    for channel in channels.every(connection):
-        if channel.id in channel_ids:
-            quantity = _offered(channel, available)
-            _list(connection, item_id, channel.id, prices[channel.name], quantity, operations)
+    return [
+        (channel, prices[channel.name], _offered(channel, available))
+        for channel in channels.every(connection)
+        if channel.id in channel_ids
+    ]
 
 
 def _offered(channel: channels.Channel, left: int) -> int:
@@ -144,7 +196,7 @@ def _publish(connection: Connection, listing_id: int, operations: ChannelOperati
     try:
         link = operations.publish(connection, one(connection, listing_id))
     except PublishRefused as refusal:
-        connection.execute(update(listings).where(listings.c.id == listing_id).values(problem=str(refusal)))
+        report_problem(connection, listing_id, str(refusal))
         return
     if link is not None:
         activate(connection, listing_id, link)
@@ -246,12 +298,17 @@ def activate(connection: Connection, listing_id: int, link: str) -> None:
 
 def updated(connection: Connection, listing_id: int) -> None:
     """The listing on its channel has its price and copies: it is active as it is."""
-    _set(connection, listing_id, status=Status.ACTIVE)
+    _set(connection, listing_id, status=Status.ACTIVE, problem=None)
 
 
 def closed(connection: Connection, listing_id: int) -> None:
     """The listing is off its channel."""
-    _set(connection, listing_id, status=Status.CLOSED)
+    _set(connection, listing_id, status=Status.CLOSED, problem=None)
+
+
+def report_problem(connection: Connection, listing_id: int, problem: str) -> None:
+    """Why the listing's channel did not do what it was asked, for Manuel to read until it is done."""
+    _set(connection, listing_id, problem=problem)
 
 
 def one(connection: Connection, listing_id: int) -> Listing | None:

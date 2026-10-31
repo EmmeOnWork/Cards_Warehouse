@@ -10,7 +10,18 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import Connection
 
-from cards_warehouse import channels, exposure, gradings, items, listing_texts, partners, photos, purchases, stock
+from cards_warehouse import (
+    channel_queue,
+    channels,
+    exposure,
+    gradings,
+    items,
+    listing_texts,
+    partners,
+    photos,
+    purchases,
+    stock,
+)
 from cards_warehouse.cost_split import TooSmallToSplit
 from cards_warehouse.items import Card, Condition, Grading, Item, Kind, Sealed, grade_text
 from cards_warehouse.money import format_euros, parse_euros
@@ -400,6 +411,7 @@ def item_page(request: Request, item_id: int):
         texts = listing_texts.of_item(connection, item_id)
         grading = {"at_grader": gradings.at_grader(connection, item_id), "graded": gradings.back(connection, item_id)}
         listings = exposure.of_item(connection, item_id)
+        waiting = channel_queue.of_item(connection, item_id)
         listed = {listing.channel for listing in listings}
         free_channels = [channel for channel in channels.every(connection) if channel.name not in listed]
         bulk = _bulk(connection, item_id) if item.kind == Kind.BULK else None
@@ -414,6 +426,7 @@ def item_page(request: Request, item_id: int):
             "texts": texts,
             "gradable": gradable,
             "listings": listings,
+            "waiting": waiting,
             "free_channels": free_channels,
             "bulk": bulk,
             **prices,

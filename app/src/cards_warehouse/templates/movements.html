@@ -18,7 +18,9 @@
           <tr>
             <td>{{ movement.at | day }}</td>
             <td>
-              {{ causes[movement.cause] }}
+              {#- A sale is opened from here, to see it or to cancel it. #}
+              {% if movement.sale_id %}<a href="/sales/{{ movement.sale_id }}">{{ causes[movement.cause] }}</a>
+              {%- else %}{{ causes[movement.cause] }}{% endif %}
               {% set others = counterparts.get(movement.id, []) %}
               {% if others %}
                 <br><small>

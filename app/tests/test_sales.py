@@ -11,7 +11,7 @@ import pytest
 from cards_warehouse import gradings, items, manual_channels, sales, stock
 from cards_warehouse.items import Card, Condition, Item, Kind
 from cards_warehouse.pricing import Margin
-from cards_warehouse.sales import NotEnoughCopies, Sale
+from cards_warehouse.sales import AlreadyCancelled, Cancellation, NotEnoughCopies, Sale
 from tests.test_exposure import channel_ids
 
 
@@ -111,6 +111,42 @@ def test_a_graded_card_sold_costs_the_card_and_its_grading(connection):
     sale = sales.record(connection, Sale(graded, tilt(connection), 1, 7000), manual_channels.MANUAL)
 
     assert sales.one(connection, sale).cost_cents == 4967
+
+
+# Two copies sold together from two lots, at 30,00 and 40,00, and sent back: each goes back to its own lot, at its cost.
+def test_a_sale_cancelled_puts_each_copy_back_in_the_lot_it_came_from(connection):
+    card = a_card(connection, copies=1, unit_cost_cents=3000)
+    stock.load(connection, card, quantity=1, unit_cost_cents=4000)
+    before = stock.lots(connection, card)
+    sale = sales.record(connection, Sale(card, tilt(connection), 2, 10000), manual_channels.MANUAL)
+
+    sales.cancel(connection, sale, Cancellation.RETURN)
+
+    assert stock.lots(connection, card) == before
+
+
+# The buyer cancelled the order: the sale stays, known as cancelled and why.
+def test_a_sale_cancelled_stays_with_the_cause_and_the_note_of_its_cancellation(connection):
+    card = a_card(connection, copies=1, unit_cost_cents=5000)
+    sale = sales.record(connection, Sale(card, tilt(connection), 1, 6000), manual_channels.MANUAL)
+
+    sales.cancel(connection, sale, Cancellation.ORDER_CANCELLED, note="Ha cambiato idea")
+
+    cancelled = sales.one(connection, sale).cancelled
+    assert (cancelled.cause, cancelled.note) == (Cancellation.ORDER_CANCELLED, "Ha cambiato idea")
+
+
+# Its copies went back once: a second cancellation would give them back again, and the stock would count them twice.
+def test_a_sale_cancelled_already_cannot_be_cancelled_again(connection):
+    card = a_card(connection, copies=1, unit_cost_cents=5000)
+    sale = sales.record(connection, Sale(card, tilt(connection), 1, 6000), manual_channels.MANUAL)
+    sales.cancel(connection, sale, Cancellation.RETURN)
+
+    with pytest.raises(AlreadyCancelled):
+        sales.cancel(connection, sale, Cancellation.ORDER_CANCELLED)
+
+    assert stock.available(connection, card) == 1
+    assert sales.one(connection, sale).cancelled.cause == Cancellation.RETURN
 
 
 def a_card(connection, copies: int, unit_cost_cents: int | None) -> int:

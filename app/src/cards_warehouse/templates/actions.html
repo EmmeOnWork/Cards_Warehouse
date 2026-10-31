@@ -4,6 +4,18 @@
 
 {% block content %}
   <h1>Da fare</h1>
+  {# Not Manuel's to do: what a channel with an API did not answer, which the app asks again by itself. #}
+  {% if waiting %}
+    <section>
+      <h2>In attesa di nuovo tentativo</h2>
+      <p>L'app ci riprova da sola: qui non c'è niente da fare.</p>
+      <ul>
+        {% for operation in waiting %}
+          <li><a href="/items/{{ operation.listing.item_id }}">{{ action_kinds[operation.kind] }} su {{ operation.listing.channel }} {{ names[operation.listing.item_id] }}</a></li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
   {# Channel by channel: all those of one app done in one go. #}
   {% for channel, actions in by_channel.items() %}
     <section>
@@ -11,11 +23,13 @@
       <p>{{ actions | length }} da fare</p>
       <ul>
         {% for action in actions %}
-          <li><a href="/actions/{{ action.id }}">{{ action_kinds[action.kind] }} {{ names[action.listing.item_id] }}</a></li>
+          <li><a href="/actions/{{ action.id }}">{{ action_kinds[action.kind] }} {{ names[action.listing.item_id] }}</a>
+            {#- Left to Manuel on a channel the app acts on by itself, when its API did not do it. #}
+            {%- if action.listing.problem %}<p class="error" role="alert">{{ action.listing.problem }}</p>{% endif %}</li>
         {% endfor %}
       </ul>
     </section>
   {% else %}
-    <p>Niente da fare: ogni annuncio è dove deve essere.</p>
+    {% if not waiting %}<p>Niente da fare: ogni annuncio è dove deve essere.</p>{% endif %}
   {% endfor %}
 {% endblock %}

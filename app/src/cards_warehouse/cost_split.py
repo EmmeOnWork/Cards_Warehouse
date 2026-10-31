@@ -17,13 +17,14 @@ def equal_parts(amount_cents: int, parts: int) -> list[int]:
     return [share + 1] * left_over + [share] * (parts - left_over)
 
 
-def one_part(amount_cents: int, parts: int) -> int:
-    """One of the parts that share the amount equally, rounded to the nearest cent and a cent at least: what a card
-    taken out of the bulk costs, of the cost of its lot's cards. The last part is what is left of the amount."""
+def part_of(amount_cents: int, parts: int, taken: int) -> int:
+    """What `taken` of the parts that share the amount equally come to, rounded to the nearest cent and a cent at
+    least: what cards taken out of the bulk cost, of the cost of their lot's cards. All the parts are the amount, so
+    the last cards take what is left of it."""
     if amount_cents < 1:
         raise TooSmallToSplit(f"{amount_cents} cents cannot give a cent to a part")
     # Half a cent up, in integers: a float would lose cents.
-    return max(1, (2 * amount_cents + parts) // (2 * parts))
+    return max(1, (2 * amount_cents * taken + parts) // (2 * parts))
 
 
 def in_proportion(amount_cents: int, values: list[int]) -> list[int]:

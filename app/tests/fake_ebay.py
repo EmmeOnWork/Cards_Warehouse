@@ -4,7 +4,7 @@ It checks what the real one checks."""
 import base64
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
@@ -57,6 +57,8 @@ class PublishedListing:
     condition: str
     # The values of each descriptor, by its name.
     condition_descriptors: dict[str, list[str]]
+    # Its offer withdrawn: no buyer can find it or buy it anymore.
+    ended: bool = False
 
 
 POLICY_KINDS = ("fulfillment", "payment", "return")
@@ -91,8 +93,12 @@ class FakeEbay:
         self._inventory: dict[str, dict] = {}
         self._offers: dict[str, dict] = {}
         self.listings: list[PublishedListing] = []
+        # The listing each published offer is, by its place among the listings.
+        self._live: dict[str, int] = {}
         # Every call to the APIs of a seller, answered or refused.
         self.requests_to_sell = 0
+        # Every request that reached eBay in an outage, and got no answer of eBay's.
+        self.unanswered = 0
 
     def http(self) -> httpx.Client:
         return httpx.Client(transport=self.transport())
@@ -130,11 +136,21 @@ class FakeEbay:
     def revoke(self) -> None:
         self._revoked = True
 
+    # What happens when Manuel deletes the items from eBay's Seller Hub: their offers and listings go with them.
+    def remove_by_hand(self) -> None:
+        self._inventory.clear()
+        self._offers.clear()
+        self._live.clear()
+        self.listings = [replace(listing, ended=True) for listing in self.listings]
+
     # "unreachable": no answer at all, as with no network. "broken": eBay answers, with an error page of its own.
-    def fail(self, outage: str) -> None:
+    # None: eBay answers again.
+    def fail(self, outage: str | None) -> None:
         self._outage = outage
 
     def _answer(self, request: httpx.Request) -> httpx.Response:
+        if self._outage:
+            self.unanswered += 1
         if self._outage == "unreachable":
             raise httpx.ConnectError("[Errno -3] Temporary failure in name resolution", request=request)
         if self._outage == "broken":
@@ -216,10 +232,16 @@ class FakeEbay:
         if method == "PUT" and path.startswith("/sell/inventory/v1/inventory_item/"):
             self._inventory[path.rsplit("/", 1)[1]] = json.loads(request.content)
             return httpx.Response(204)
+        if (method, path) == ("GET", "/sell/inventory/v1/offer"):
+            return self._offers_of(request.url.params)
         if (method, path) == ("POST", "/sell/inventory/v1/offer"):
             return self._new_offer(json.loads(request.content))
+        if (method, path) == ("POST", "/sell/inventory/v1/bulk_update_price_quantity"):
+            return self._bulk_update(json.loads(request.content))
         if method == "POST" and path.startswith("/sell/inventory/v1/offer/") and path.endswith("/publish"):
             return self._publish(path.split("/")[-2])
+        if method == "POST" and path.startswith("/sell/inventory/v1/offer/") and path.endswith("/withdraw"):
+            return self._withdraw(path.split("/")[-2])
         if method == "PUT" and path.startswith("/sell/inventory/v1/offer/"):
             return self._update_offer(path.rsplit("/", 1)[1], json.loads(request.content))
         return _refusal(404, 2002, "Resource not found.")
@@ -307,6 +329,48 @@ class FakeEbay:
         self._offers[offer_id] = offer
         return httpx.Response(201, json={"offerId": offer_id})
 
+    # The offers of an item on a marketplace: one at most, since eBay refuses a second.
+    def _offers_of(self, params: httpx.QueryParams) -> httpx.Response:
+        found = [
+            {"offerId": offer_id, "sku": offer["sku"], "marketplaceId": offer["marketplaceId"]}
+            for offer_id, offer in self._offers.items()
+            if (offer["sku"], offer["marketplaceId"]) == (params.get("sku"), params.get("marketplace_id"))
+        ]
+        if not found:
+            return _refusal(404, 25713, "This Offer is not available.")
+        return httpx.Response(200, json={"total": len(found), "offers": found})
+
+    # The copies of each item, and the copies and the price of its offers: a listing live shows them at once. eBay
+    # answers 200 to the call, and says for each item whether it took it.
+    def _bulk_update(self, body: dict) -> httpx.Response:
+        responses = []
+        for change in body["requests"]:
+            self._inventory[change["sku"]]["availability"] = {
+                "shipToLocationAvailability": change["shipToLocationAvailability"]
+            }
+            for offer in change.get("offers", []):
+                kept = self._offers[offer["offerId"]]
+                kept["availableQuantity"] = offer["availableQuantity"]
+                kept["pricingSummary"] = {"price": offer["price"]}
+                if offer["offerId"] in self._live:
+                    at = self._live[offer["offerId"]]
+                    price = offer["price"]
+                    self.listings[at] = replace(
+                        self.listings[at],
+                        quantity=offer["availableQuantity"],
+                        price=(price["value"], price["currency"]),
+                    )
+                responses.append({"statusCode": 200, "sku": change["sku"], "offerId": offer["offerId"]})
+        return httpx.Response(200, json={"responses": responses})
+
+    # The listing ends, and the offer stays, unpublished. Only a published offer can be withdrawn.
+    def _withdraw(self, offer_id: str) -> httpx.Response:
+        if offer_id not in self._live:
+            return _refusal(400, 25713, "This Offer is not available.")
+        at = self._live.pop(offer_id)
+        self.listings[at] = replace(self.listings[at], ended=True)
+        return httpx.Response(200, json={"listingId": self.listings[at].listing_id, "warnings": []})
+
     # Everything but the item, the marketplace and the format, which an offer keeps from its start.
     def _update_offer(self, offer_id: str, values: dict) -> httpx.Response:
         if offer_id not in self._offers:
@@ -344,6 +408,7 @@ class FakeEbay:
             return _refusal(400, 25002, "A user error has occurred. The title is missing or too long.")
         price = offer["pricingSummary"]["price"]
         listing_id = f"{110_000_000_000 + len(self.listings) + 1}"
+        self._live[offer_id] = len(self.listings)
         self.listings.append(
             PublishedListing(
                 listing_id=listing_id,

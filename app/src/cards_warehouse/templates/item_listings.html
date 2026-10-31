@@ -19,18 +19,25 @@
         {% endfor %}
       </tbody>
     </table>
+    {# What a channel with an API did not answer: the worker asks it again, with no need of Manuel. #}
+    {% for operation in waiting %}
+      <p>{{ operation.listing.channel }} non risponde: l'app ci riprova da sola, in attesa di nuovo tentativo.</p>
+    {% endfor %}
     {# Off one channel, by Manuel's choice: the others go on offering it. #}
     {% for listing in listings if listing.status != "to_close" %}
       <form method="post" action="/listings/{{ listing.id }}/withdraw">
         <button type="submit">Ritira da {{ listing.channel }}</button>
       </form>
     {% endfor %}
-    {# Why a channel refused a listing, and a tap to ask it again once that is fixed. #}
+    {# Why a channel refused a listing, and a tap to ask it again once that is fixed. An update or a close its API did
+       not do is Manuel's, in Da fare: nothing to ask again. #}
     {% for listing in listings if listing.problem %}
       <p class="error" role="alert">{{ listing.problem }}</p>
-      <form method="post" action="/listings/{{ listing.id }}/again">
-        <button type="submit">Riprova su {{ listing.channel }}</button>
-      </form>
+      {% if listing.status == "to_publish" %}
+        <form method="post" action="/listings/{{ listing.id }}/again">
+          <button type="submit">Riprova su {{ listing.channel }}</button>
+        </form>
+      {% endif %}
     {% endfor %}
   {% else %}
     <p>Non è in vendita su nessun canale.</p>

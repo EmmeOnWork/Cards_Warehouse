@@ -1,0 +1,62 @@
+# The worker (app/src/cards_warehouse/worker.py): from the app's own image, every 30 s it asks eBay again the updates
+# and the closes eBay did not answer when the app asked, and after an hour leaves them to Manuel. A component of its own,
+# with no traffic: the app's pages read the queue it works on from the database.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker
+  annotations:
+    # It reads the eBay values only at start: the operator restarts it when one changes in Infisical.
+    secrets.infisical.com/auto-reload: "true"
+spec:
+  # One is all the work needs. Two would still never send an operation twice: each takes the lock of its listing.
+  replicas: 1
+  # A new version replaces it without the two running side by side.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "cards-warehouse.workerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cards-warehouse.workerSelectorLabels" . | nindent 8 }}
+    spec:
+      # It asks Kubernetes nothing: no token.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          # The same image as the app, of the same commit. Before the app's pod has run a new migration the worker
+          # can find the database behind: it stops, and Kubernetes starts it again after a pause.
+          image: "{{ .Values.image.repository }}:{{ required "image.tag: the commit to run" .Values.image.tag }}"
+          command: [python, -m, cards_warehouse.worker]
+          securityContext:
+            {{- include "cards-warehouse.containerSecurityContext" . | nindent 12 }}
+          # The database and eBay: none of the app's other secrets. The bucket is named for eBay's adapter, which
+          # needs a photo only to publish, and the worker never publishes: it asks AWS nothing.
+          env:
+            {{- include "cards-warehouse.databaseEnv" . | nindent 12 }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cards-warehouse.secretName" . }}
+                  key: PGPASSWORD
+            - name: PHOTOS_BUCKET
+              value: {{ .Values.photos.bucket }}
+            - name: PHOTOS_REGION
+              value: {{ .Values.photos.region }}
+            {{- range .Values.optionalSecrets }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cards-warehouse.secretName" $ }}
+                  key: {{ . }}
+                  optional: true
+            {{- end }}
+          # The same as the app's: it loads the same code, and does less.
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

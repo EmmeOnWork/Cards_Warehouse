@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError
 from cards_warehouse import (
     access,
     backups,
+    bulk_pages,
     channel_pages,
     daily_check_pages,
     ebay,
@@ -88,9 +89,10 @@ def create_app(
     app.state.ebay_status = lambda: ebay.status(ebay_account)
     # The private bucket of the foundations, with the scoped key from Infisical. Nothing is asked to AWS here.
     app.state.photos = photo_store or photos.S3Store.from_environment()
-    # What the pages hand to the exposure for every channel: eBay through its API once switched on its page.
+    # What the pages hand to the exposure for every channel: eBay through its API once switched on its page. What
+    # eBay does not answer waits in the queue, which the worker asks again (worker.py).
     app.state.channel_operations = ByChannel(
-        {"eBay": EbayChannel(ebay_account, SellerSetup.from_environment(), app.state.photos)}
+        {"eBay": EbayChannel(ebay_account, SellerSetup.from_environment(), app.state.photos)}, now=now
     )
     app.include_router(pages.router)
     app.include_router(item_pages.router)
@@ -104,6 +106,7 @@ def create_app(
     app.include_router(grading_pages.router)
     app.include_router(purchase_pages.router)
     app.include_router(sale_pages.router)
+    app.include_router(bulk_pages.router)
     app.include_router(live_pages.router)
     app.include_router(daily_check_pages.router)
     app.include_router(listing_pages.router)
