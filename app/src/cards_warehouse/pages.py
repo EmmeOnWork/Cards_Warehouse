@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 
-from cards_warehouse import channel_queue, daily_check
+from cards_warehouse import channel_queue, channel_sales, daily_check
 from cards_warehouse.money import format_euros, format_percent
 
 # Inside the package, so the image carries them without the sources.
@@ -29,8 +29,11 @@ def home(request: Request):
     with request.app.state.engine.connect() as connection:
         check = daily_check.summary(daily_check.last(connection), request.app.state.now())
         queue = channel_queue.summary(connection)
+        orders = channel_sales.summary(connection)
     return templates.TemplateResponse(
-        request, "home.html", {"backup": request.app.state.backup_outcome(), "check": check, "queue": queue}
+        request,
+        "home.html",
+        {"backup": request.app.state.backup_outcome(), "check": check, "queue": queue, "orders": orders},
     )
 
 

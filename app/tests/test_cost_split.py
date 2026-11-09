@@ -1,4 +1,5 @@
-"""The split of a cost: in equal parts, or in proportion to estimated values, exact to the cent.
+"""The split of a cost: in equal parts, or in proportion to estimated values, exact to the cent. And of the net of a
+sale, by the shares of the people it goes to.
 
 In equal parts, every amount up to 20 € in every number of parts up to 50, and the largest amount an euro field
 takes. In proportion, any amount and any values such a field takes.
@@ -8,7 +9,7 @@ import pytest
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
 
-from cards_warehouse.cost_split import TooSmallToSplit, equal_parts, in_proportion, part_of
+from cards_warehouse.cost_split import TooSmallToSplit, by_shares, equal_parts, in_proportion, part_of
 
 LARGEST = 999_999_999
 
@@ -133,3 +134,37 @@ def test_a_piece_estimated_below_a_cent_is_refused(values):
 @pytest.mark.parametrize(("taken", "part"), [(3, 200), (1, 67), (9, 600)])
 def test_cards_taken_out_of_a_lot_cost_their_part_of_it_to_the_nearest_cent(taken, part):
     assert part_of(600, 9, taken) == part
+
+
+@st.composite
+def nets(draw) -> tuple[int, list[int]]:
+    """The net of a sale, below zero too when the fee and the shipping take more than the price, and the weights of
+    the people it goes to: their percents, by the copies of each lot. Some at 0 %, who paid without a share."""
+    weights = draw(st.lists(st.integers(min_value=0, max_value=100 * 1000), min_size=1, max_size=10))
+    assume(sum(weights) > 0)
+    return draw(st.integers(min_value=-LARGEST, max_value=LARGEST)), weights
+
+
+# The parts of a sale are the net, to the cent, whatever it is: none lost, and none made up.
+@given(nets())
+@example(net=(0, [50, 50]))
+@example(net=(-101, [50, 50]))
+def test_the_parts_of_a_net_always_add_up_to_it(net):
+    amount, weights = net
+    assert sum(by_shares(amount, weights)) == amount
+
+
+# Nobody takes a cent from another beyond the rounding: 60,01 € half and half is 30,01 € to the first, 30,00 € to the
+# second; -1,01 € is -0,50 € and -0,51 €.
+@given(nets())
+@example(net=(6001, [50, 50]))
+def test_each_part_of_a_net_is_its_exact_share_rounded_down_or_up(net):
+    amount, weights = net
+    total = sum(weights)
+    for weight, part in zip(weights, by_shares(amount, weights), strict=True):
+        assert amount * weight // total <= part <= -(-amount * weight // total)
+
+
+@pytest.mark.parametrize(("amount", "parts"), [(6001, [3001, 3000]), (-101, [-50, -51])])
+def test_the_cent_left_over_of_a_net_goes_to_the_first_on_a_tie(amount, parts):
+    assert by_shares(amount, [50, 50]) == parts

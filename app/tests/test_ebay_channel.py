@@ -4,6 +4,7 @@ Against the fake eBay, on a real PostgreSQL, through the exposure module.
 """
 
 import io
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -274,6 +275,29 @@ def test_an_item_the_app_cannot_describe_to_ebay_is_not_published_and_the_listin
     [listing] = exposure.of_item(connection, item_id)
     assert listing.problem == reason
     assert fake_ebay.requests_to_sell == 0
+
+
+# Two orders of the box, an hour apart: read since between them, the second, with what the app keeps of it.
+def test_the_orders_since_a_time_come_with_their_listing_copies_price_and_date(connection, photos, monkeypatch):
+    fake_ebay = FakeEbay(photos=photos.open)
+    channel = ebay_channel(monkeypatch, fake_ebay, photos)
+    box = a_photographed(connection, photos, BOX, copies=3)
+    exposure.put_on_sale(connection, box, channel_ids(connection, "eBay"), channel)
+    [listing] = exposure.of_item(connection, box)
+    [on_ebay] = fake_ebay.listings
+    morning = datetime(2026, 11, 1, 9, 0, 0, 250000, tzinfo=UTC)
+    fake_ebay.buy(on_ebay.listing_id, 1, at=morning)
+    number = fake_ebay.buy(on_ebay.listing_id, 2, at=morning + timedelta(hours=1))
+
+    [order] = channel.orders(since=morning + timedelta(minutes=30))
+
+    assert (order.number, order.listing_id, order.quantity, order.price_cents, order.at) == (
+        number,
+        listing.id,
+        2,
+        2 * listing.price_cents,
+        morning + timedelta(hours=1),
+    )
 
 
 def ebay_channel(monkeypatch, fake_ebay: FakeEbay, store) -> EbayChannel:

@@ -282,7 +282,7 @@ def _change(connection: Connection, listing: Listing, operations: ChannelOperati
         return
     _set(connection, listing.id, status=Status.TO_UPDATE, **values)
     if operations.update(connection, one(connection, listing.id)):
-        _set(connection, listing.id, status=Status.ACTIVE)
+        updated(connection, listing.id)
 
 
 def _set(connection: Connection, listing_id: int, **values) -> None:

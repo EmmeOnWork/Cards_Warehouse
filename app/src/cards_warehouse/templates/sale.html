@@ -23,6 +23,20 @@
         </label>
       {% endfor %}
 
+      {% if partners %}
+        {# A partner who sold it from their own account: the money is with them, and the balance follows. #}
+        <p>Incassato da</p>
+        <label class="check">
+          <input type="radio" name="collected_by" value=""{% if not form.collected_by %} checked{% endif %}> Manuel
+        </label>
+        {% for partner in partners %}
+          <label class="check">
+            <input type="radio" name="collected_by" value="{{ partner.id }}"
+                   {%- if form.collected_by == partner.id | string %} checked{% endif %}> {{ partner.name }}
+          </label>
+        {% endfor %}
+      {% endif %}
+
       {% if bulk %}
         {# Sold by weight or by lot: the cards it comes to, by eye. #}
         <label for="quantity">Carte, anche a occhio</label>

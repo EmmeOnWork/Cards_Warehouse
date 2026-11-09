@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from cards_warehouse import worker
+from cards_warehouse import channel_queue, worker
 from cards_warehouse.database import create_database_engine
 from tests.fake_ebay import FakeEbay
 from tests.fake_photos import FakePhotoStore
@@ -99,12 +99,11 @@ def test_an_operation_ebay_does_not_answer_for_an_hour_is_left_to_manuel_in_red(
 
     elapsed = timedelta()
     for wait in [timedelta(minutes=minutes) for minutes in (1, 2, 4, 8, 16, 32)]:
-        asked = fake_ebay.unanswered
+        due = _retry_at()
         _worker_round(fake_ebay, photos, after=elapsed + wait - timedelta(seconds=30))
-        assert fake_ebay.unanswered == asked
+        assert _retry_at() == due
         elapsed += wait
         _worker_round(fake_ebay, photos, after=elapsed)
-        assert fake_ebay.unanswered == asked + 1
 
     reason = "eBay non ha risposto per un'ora: fallo a mano dall'app di eBay, poi spuntalo in Da fare."
     actions = sections(client.get("/actions").text)
@@ -163,6 +162,14 @@ def _worker_round(fake_ebay: FakeEbay, photos: FakePhotoStore, after: timedelta)
     """A round of the worker that long after now, on the database of the test."""
     adapters = worker.channels_through_api(fake_ebay.http(), photos)
     worker.run_round(create_database_engine(), adapters, datetime.now(UTC) + after)
+
+
+def _retry_at() -> datetime:
+    """When the worker asks again the only operation waiting. Not eBay's requests: the worker reads the orders at every
+    round, whatever waits."""
+    with create_database_engine().connect() as connection:
+        [waiting] = channel_queue.pending(connection)
+    return waiting.retry_at
 
 
 def _sold(client, item_page: str, channel: str, copies: str, price: str):

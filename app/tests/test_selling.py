@@ -99,14 +99,25 @@ def test_a_sale_without_a_price_of_one_cent_at_least_is_refused_with_what_manuel
     assert "Copie disponibili 1" in text(signed_in_client.get(item_page).text)
 
 
-# Until the double sales (task 24): the stock would go below zero.
-def test_a_sale_of_more_copies_than_are_left_is_refused_and_says_how_many_there_are(signed_in_client):
+# One copy of Mew ex left, two sold on Vinted at 120,00, which keeps nothing: the one there is a sale of 60,00, whose
+# page leads to the double sale of the other, in the same order, which has no cost and no margin.
+def test_a_sale_of_more_copies_than_are_left_leads_to_the_double_sale_of_those_that_were_not(signed_in_client):
     item_page = signed_in_client.post("/items", data=MEW).url.path
 
-    response = sell(signed_in_client, item_page, channel="Tilt", quantity="2", price="120")
+    sold = sell(signed_in_client, item_page, channel="Vinted", quantity="2", price="120")
 
-    assert response.status_code == 422
-    assert "Copie disponibili: 1. Non puoi venderne 2." in html.unescape(response.text)
+    shown = sections(sold.text)
+    assert "Copie 1 Prezzo 60,00 €" in text(shown["Vendita"])
+    assert text(shown["Doppia vendita"]) == (
+        "Doppia vendita Le copie che mancavano sono una doppia vendita. Apri la doppia vendita"
+    )
+    double = sections(signed_in_client.get(links(shown["Doppia vendita"])["Apri la doppia vendita"]).text)
+    assert text(double["Vendita"]) == (
+        "Vendita Canale Vinted Copie 1 Prezzo 60,00 € Commissione 0,00 € Spedizione 0,00 €"
+    )
+    assert text(double["Doppia vendita"]) == (
+        "Doppia vendita 1 copia era già venduta altrove: nessuna è uscita dal magazzino."
+    )
 
 
 # Two copies of Mew ex bought at different times: Manuel sold the one of the second lot, at 40,00. With one lot the

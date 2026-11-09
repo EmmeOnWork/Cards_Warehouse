@@ -14,13 +14,47 @@
       <dt>Prezzo</dt><dd>{{ sale.price_cents | euros }} €</dd>
       <dt>Commissione</dt><dd>{{ sale.fee_cents | euros }} €</dd>
       <dt>Spedizione</dt><dd>{{ sale.shipping_cents | euros }} €</dd>
-      <dt>Costo</dt><dd>{% if sale.cost_cents is none %}sconosciuto{% else %}{{ sale.cost_cents | euros }} €{% endif %}</dd>
-      {# On the cost: what is left of the price once the fee, the shipping and the copies are paid. #}
-      <dt>Margine</dt>
-      <dd>{% if sale.margin is none %}non calcolabile{% else %}{{ sale.margin.cents | euros }} € · {{ sale.margin.percent | percent }} %{% endif %}</dd>
+      {# A double sale took no copy: it has no cost, and no margin. #}
+      {% if not sale.double %}
+        <dt>Costo</dt><dd>{% if sale.cost_cents is none %}sconosciuto{% else %}{{ sale.cost_cents | euros }} €{% endif %}</dd>
+        {# On the cost: what is left of the price once the fee, the shipping and the copies are paid. #}
+        <dt>Margine</dt>
+        <dd>{% if sale.margin is none %}non calcolabile{% else %}{{ sale.margin.cents | euros }} € · {{ sale.margin.percent | percent }} %{% endif %}</dd>
+      {% endif %}
       {% if sale.note %}<dt>Nota</dt><dd>{{ sale.note }}</dd>{% endif %}
     </dl>
   </section>
+
+  {# Copies sold already elsewhere: all those of this sale, or some of its order, in a double sale of their own. #}
+  {% if sale.double %}
+    <section>
+      <h2>Doppia vendita</h2>
+      <p>{% if sale.quantity == 1 %}1 copia era già venduta{% else %}{{ sale.quantity }} copie erano già vendute{% endif %} altrove: nessuna è uscita dal magazzino.</p>
+    </section>
+  {% elif sale.double_part %}
+    <section>
+      <h2>Doppia vendita</h2>
+      <p>Le copie che mancavano sono una doppia vendita. <a href="/sales/{{ sale.double_part }}">Apri la doppia vendita</a></p>
+    </section>
+  {% endif %}
+
+  {# The net by the shares of the lots sold: what the one who took the money owes the others. #}
+  {% if parts %}
+    <section>
+      <h2>Parti</h2>
+      <p>Ha incassato {{ parts.collected_by }}.</p>
+      <table>
+        <thead>
+          <tr><th>Chi</th><th>Parte del netto</th></tr>
+        </thead>
+        <tbody>
+          {% for person, cents in parts.parts %}
+            <tr><td>{{ person }}</td><td>{{ cents | euros }} €</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
 
   {% if sale.cancelled %}
     <section>

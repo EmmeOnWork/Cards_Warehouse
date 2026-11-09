@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import httpx
 from sqlalchemy import Engine
 
-from cards_warehouse import channel_queue, ebay, photos
+from cards_warehouse import channel_queue, channel_sales, ebay, photos
 from cards_warehouse.database import create_database_engine
 from cards_warehouse.ebay_channel import EbayChannel, SellerSetup
 from cards_warehouse.exposure import ChannelOperations
@@ -25,11 +25,14 @@ def channels_through_api(http: httpx.Client, store: photos.Store) -> dict[str, C
 
 def run_round(engine: Engine, adapters: Mapping[str, ChannelOperations], now: datetime) -> None:
     """Every operation whose wait is over, asked again. Each in a transaction of its own: a sale recorded meanwhile
-    waits only for the one the worker is asking about, when it is on the same listing."""
+    waits only for the one the worker is asking about, when it is on the same listing. Then the orders made on the
+    channels, each a sale."""
     while True:
         with engine.begin() as connection:
             if not channel_queue.retry_next(connection, adapters, now):
-                return
+                break
+    with engine.begin() as connection:
+        channel_sales.read(connection, adapters, now)
 
 
 if __name__ == "__main__":

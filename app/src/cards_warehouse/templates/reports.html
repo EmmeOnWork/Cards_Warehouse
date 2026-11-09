@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Conti · Magazzino{% endblock %}
+
+{# Sales or copies counted, with those of a cost not known told apart. #}
+{% macro counted(count, cost_unknown) %}
+  {{ count }}
+  {% if cost_unknown %}<br><span class="tag">+{{ cost_unknown }} a costo sconosciuto</span>{% endif %}
+{% endmacro %}
+
+{# A row of the capital: of a kind, or all together. #}
+{% macro capital_row(label, capital) %}
+  <tr>
+    <td>{{ label }}</td>
+    <td class="number">{{ counted(capital.copies, capital.cost_unknown) }}</td>
+    <td class="number">{{ capital.cost_cents | euros }} €</td>
+  </tr>
+{% endmacro %}
+
+{# A row of a period: its sales, those left out, and its margin against the target. #}
+{% macro margin_row(label, period, warning) %}
+  <tr>
+    <td>{{ label }}</td>
+    <td class="number">{{ counted(period.sales, period.cost_unknown) }}</td>
+    {% if period.cost_unknown and period.margin is none %}
+      <td class="number" colspan="2">non calcolabile</td>
+    {% elif period.margin is none %}
+      <td class="number" colspan="2">nessuna vendita</td>
+    {% else %}
+      <td class="number">{{ period.margin.cents | euros }} €</td>
+      <td class="number">
+        {{ period.margin.percent | percent }} %
+        {% if warning %}
+          {% set text, style = margin_warnings[warning] %}
+          <br><span class="{{ style }}">{{ text }}</span>
+        {% endif %}
+      </td>
+    {% endif %}
+  </tr>
+{% endmacro %}
+
+{% block content %}
+  <h1>Conti</h1>
+  <section>
+    <h2>Margine del mese</h2>
+    <p>
+      Obiettivo {{ target | percent }} % sul costo.
+      Il margine di un mese è il margine in euro delle sue vendite diviso il costo delle copie vendute: quanto il mese
+      ha reso davvero, non la media delle percentuali. Le vendite annullate non contano; quelle a costo sconosciuto
+      restano fuori e sono contate a parte.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Mese</th><th class="number">Vendite</th><th class="number" colspan="2">Margine</th></tr>
+      </thead>
+      <tbody>
+        {% for period, warning in months %}{{ margin_row(period.first_day | month, period, warning) }}{% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Periodo</h2>
+    <p>Lo stesso margine, dal primo giorno all'ultimo, compresi.</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="get" action="/reports">
+      <label for="first_day">Dal</label>
+      <input id="first_day" name="first_day" type="date" required value="{{ form.first_day }}">
+      <label for="last_day">Al</label>
+      <input id="last_day" name="last_day" type="date" required value="{{ form.last_day }}">
+      <button type="submit">Mostra</button>
+    </form>
+    {% if period %}
+      {% set shown, warning = period %}
+      <table>
+        <thead>
+          <tr><th>Periodo</th><th class="number">Vendite</th><th class="number" colspan="2">Margine</th></tr>
+        </thead>
+        <tbody>
+          {{ margin_row(shown | days, shown, warning) }}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+  <section>
+    <h2>Capitale fermo</h2>
+    <p>
+      Quanto costano le copie disponibili in magazzino: quelle vendute, aperte o dal gradatore non ci sono. Del bulk,
+      le carte. Le copie a costo sconosciuto sono contate a parte.
+    </p>
+    {% if capital.by_kind %}
+      <table>
+        <thead>
+          <tr><th>Tipo</th><th class="number">Copie</th><th class="number">Capitale</th></tr>
+        </thead>
+        <tbody>
+          {% for kind, each in capital.by_kind.items() %}{{ capital_row(kinds[kind], each) }}{% endfor %}
+        </tbody>
+        <tfoot>
+          {{ capital_row("Totale", capital.total) }}
+        </tfoot>
+      </table>
+    {% else %}
+      <p>Nessuna copia disponibile: niente capitale fermo.</p>
+    {% endif %}
+  </section>
+{% endblock %}

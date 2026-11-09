@@ -29,6 +29,7 @@ from cards_warehouse import (
     photos,
     price_pages,
     purchase_pages,
+    report_pages,
     sale_pages,
 )
 from cards_warehouse.channel_operations import ByChannel
@@ -106,6 +107,7 @@ def create_app(
     app.include_router(grading_pages.router)
     app.include_router(purchase_pages.router)
     app.include_router(sale_pages.router)
+    app.include_router(report_pages.router)
     app.include_router(bulk_pages.router)
     app.include_router(live_pages.router)
     app.include_router(daily_check_pages.router)

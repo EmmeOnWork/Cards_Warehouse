@@ -108,15 +108,26 @@ Once the channel is switched, the app brings each eBay listing down to the copie
 
 **What asking again would not fix** is Manuel's at once, with why: a refusal of eBay's, in its words, the authorization revoked, the app's keys refused, eBay not connected.
 
+## The sales on eBay, read by themselves
+
+Once the channel is switched, the worker reads eBay's orders at every round, every 30 s (`getOrders` of the Fulfillment API, `channel_sales.py`). eBay's notifications are not used: they need a public address, which the cluster does not have.
+
+- **Each line of an order is a sale**, as one Manuel records by hand: the copies leave the stock, and *Da fare* gets the actions to lower or close the item on Vinted and Tilt. The listing on eBay is not asked anything: eBay lowered it, or ended it with its last copy, by itself. Copies already sold elsewhere make a double sale.
+- **Only the app's listings:** a line is of a listing when its item is `listing-<number>`. An order of a listing made on eBay's own pages is left to Manuel.
+- **Of an order the app keeps** the number (in the sale's note, *Ordine eBay 12-34567-89012*), the line, the item, the copies, the price and the day the buyer bought. The buyer's name, user name, address, phone and email are read with the order and kept nowhere.
+- **Each read asks for the orders made since the last read that worked**, 15 minutes before it, for an order eBay lists late. Never those of the last 90 days at every round, which is what eBay gives with no date. An order read twice is still one sale.
+- **When a read fails**, with eBay not answering or the authorization refused, the home says in red since when and why. The read after one that failed asks from the last that worked, so it finds the orders missed. Then the line goes.
+
 ## The answers recorded
 
 The tests run against a fake eBay (`tests/fake_ebay.py`), and also against the answers the sandbox gave, kept in `app/tests/ebay_responses/sandbox.json` (`tests/test_ebay_recorded.py`). To record them, or record them again after a change in the adapter:
 
 1. Run `make ebay-record`, with the sandbox's values: client ID, client secret and durable credential, then postal code and city. It runs on a PostgreSQL of its own, not the cluster's.
 2. It sets up the seller as `make ebay-setup` does, then publishes three listings on the sandbox: a sealed box, a card not graded and a card graded PSA 10, each with eBay's logo as its photo. The bucket is private, and eBay needs a public address. It asks for the box again, as *Riprova* does, and reads the conditions eBay lists for single cards.
-3. It prints each listing's link, or why eBay refused it, and writes the file. Neither the answers of the token nor the requests are kept: no credential and no link of the bucket are in it.
+3. It waits while you **buy one box** at the link it prints, in a private window, signed in as a second sandbox test user, the buyer (register it as the seller's, above). eBay has no API to buy with. Wait a minute after the purchase, then press Enter: it reads the orders made since it started.
+4. It prints each listing's link, or why eBay refused it, and the order read, and writes the file. Neither the answers of the token nor the requests are kept: no credential and no link of the bucket are in it. Of the orders it keeps only what the app reads: nothing of the buyer, a test user or not.
 
-The three listings stay on the sandbox, where nobody buys them.
+The three listings stay on the sandbox.
 
 ## Renewal
 
@@ -153,6 +164,6 @@ The pages of developer.ebay.com refuse automated reading, so these answers come 
 | What condition does a single card take? | Graded (2750, `LIKE_NEW`) with grader and grade, or not graded (4000, `USED_VERY_GOOD`) with the state of the card (40001). eBay refuses any other. | [Condition descriptors for trading cards](https://developer.ebay.com/api-docs/user-guides/static/mip-user-guide/mip-enum-condition-descriptor-ids-for-trading-cards.html), [eBay community](https://community.ebay.com/t5/Seller-Tools/error-message-Error-The-Condition-descriptor-Near-Mint-or-Better/m-p/33956400) |
 | Can the shipping policy be made by the API? | Yes, but it needs the code of a shipping service, which comes from the Trading API (`GeteBayDetails`). On the sandbox it does not always answer: Manuel makes it on eBay's page. | [Shipping carrier and service values](https://developer.ebay.com/api-docs/sell/static/seller-accounts/ht_shipping-setting-shipping-carrier-and-service-values.html), [eBay community](https://community.ebay.com/t5/Token-Messaging-Sandbox-related/can-not-get-Shipping-service-details-in-sandbox-required-for/td-p/34959807) |
 
-**Still to confirm on the sandbox, with `make ebay-record`:** category 261044 for the sealed products (seen only in a URL of ebay.com), category 183454 on eBay Italy, and the values of the descriptors. Sellers' posts give 400011 to 400013 for the state of a card, and others give 400015 to 400017 for card games. The values of the graders and the grades come from no page found. `tests/test_ebay_recorded.py` checks them all against what eBay lists. Also to confirm: the address of a sandbox listing, and eBay's answer to a second offer for the same item (`offerId` among the parameters of the error).
+**Still to confirm on the sandbox, with `make ebay-record`:** category 261044 for the sealed products (seen only in a URL of ebay.com), category 183454 on eBay Italy, and the values of the descriptors. Sellers' posts give 400011 to 400013 for the state of a card, and others give 400015 to 400017 for card games. The values of the graders and the grades come from no page found. `tests/test_ebay_recorded.py` checks them all against what eBay lists. Also to confirm: the address of a sandbox listing, and eBay's answer to a second offer for the same item (`offerId` among the parameters of the error). And of the orders: that a sandbox buyer can buy a listing of eBay Italy, that a line carries the `sku` of the item, and that `lineItemCost` is the price of all its copies, as the documentation of `getOrders` says.
 
 The other questions of task 31 (selling API with a private account, production keys and the account deletion notifications, call limits) concern tasks 35 to 37 and are still open.

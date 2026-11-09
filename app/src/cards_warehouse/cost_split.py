@@ -1,7 +1,9 @@
-"""The split of a cost: only arithmetic, no database. Used by purchases, openings and extractions from the bulk.
+"""The split of a cost: only arithmetic, no database. Used by purchases, openings and extractions from the bulk. And
+the split of what a sale left, or of a cost, among the people who share it, used by the balances.
 
-The parts always add up to the amount, to the cent, and none is below a cent: a copy that cost nothing would have
-no margin in percent.
+The parts always add up to the amount, to the cent. The parts of a cost are a cent at least: a copy that cost nothing
+would have no margin in percent. The parts of a person are not: a person at 0 % takes nothing, and a net below zero
+leaves parts below zero.
 """
 
 
@@ -46,6 +48,20 @@ def in_proportion(amount_cents: int, values: list[int]) -> list[int]:
     parts = [shares[index][0] if index in shares else 1 for index in range(len(values))]
     # The first ones on a tie, as in equal parts: the same split, made twice, gives the same parts.
     largest_remainders = sorted(others, key=lambda index: shares[index][1], reverse=True)
+    for index in largest_remainders[: amount_cents - sum(parts)]:
+        parts[index] += 1
+    return parts
+
+
+def by_shares(amount_cents: int, weights: list[int]) -> list[int]:
+    """The amount in parts as the weights are to one another, for the people who share it: each part is its exact
+    share rounded down, and the cents left over go one each to the largest remainders, the first ones on a tie. The
+    amount may be nothing, or below zero."""
+    total = sum(weights)
+    # Rounded down below zero too: the remainders stay between 0 and the total, and the cents left over are as many.
+    shares = [divmod(amount_cents * weight, total) for weight in weights]
+    parts = [whole for whole, _ in shares]
+    largest_remainders = sorted(range(len(weights)), key=lambda index: shares[index][1], reverse=True)
     for index in largest_remainders[: amount_cents - sum(parts)]:
         parts[index] += 1
     return parts

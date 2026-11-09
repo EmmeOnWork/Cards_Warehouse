@@ -50,7 +50,11 @@ def fee(price_cents: int, rule: FeeRule) -> int:
 def margin(price_cents: int, fee_cents: int, cost_cents: int, shipping_cents: int = 0) -> Margin:
     """The margin a price leaves, once the channel has kept its fee and the shipping left on Manuel is paid, on the
     cost of the copies."""
-    cents = price_cents - fee_cents - shipping_cents - cost_cents
+    return on_cost(price_cents - fee_cents - shipping_cents - cost_cents, cost_cents)
+
+
+def on_cost(cents: int, cost_cents: int) -> Margin:
+    """A margin of so many cents, with its percentage of the cost it was made on: of one sale, or of many together."""
     # In hundredths of a point, rounded down: never shown above the margin left, and so never on the target when it
     # is a hair below it. A loss is rounded away from zero.
     hundredths = cents * 100 * 100 // cost_cents

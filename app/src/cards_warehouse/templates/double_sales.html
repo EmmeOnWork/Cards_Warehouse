@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Doppie vendite · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Doppie vendite</h1>
+  <p>Le vendite arrivate su copie già vendute altrove, dalla più recente: registrate così, o annullate per questa causa. Ogni ordine conta una volta.</p>
+  {% if doubles %}
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Canale</th><th>Articolo</th><th class="number">Copie</th></tr>
+      </thead>
+      <tbody>
+        {% for double in doubles %}
+          <tr>
+            <td>{{ double.at | day }}</td>
+            <td>{{ double.channel }}</td>
+            <td><a href="/sales/{{ double.sale_id }}">{{ double.name }}</a></td>
+            <td class="number">{{ double.quantity }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Nessuna doppia vendita.</p>
+  {% endif %}
+{% endblock %}

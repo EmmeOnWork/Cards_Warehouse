@@ -2,7 +2,8 @@
 waits here, and the worker asks it again once its wait is over.
 
 One operation at most waits on a listing: a new one replaces it, and one done at once takes it away. Only the last
-one asked is ever sent, so an old update never reaches the channel after a close."""
+one asked is ever sent, so an old update never reaches the channel after a close. One done, at once or by the worker,
+takes away as well what was left to Manuel on the listing: the channel has its last change."""
 
 from collections import Counter
 from collections.abc import Mapping
@@ -64,7 +65,7 @@ def attempt(
         return False
     except OperationRefused as refusal:
         return _leave_to_manuel(connection, listing, kind, _refused(listing, refusal))
-    _forget(connection, listing.id)
+    _done(connection, listing.id)
     return done
 
 
@@ -93,7 +94,7 @@ def retry_next(connection: Connection, adapters: Mapping[str, ChannelOperations]
     except OperationRefused as refusal:
         _leave_to_manuel(connection, listing, kind, _refused(listing, refusal))
         return True
-    _forget(connection, listing.id)
+    _done(connection, listing.id)
     if kind == ActionKind.UPDATE:
         exposure.updated(connection, listing.id)
     else:
@@ -179,6 +180,13 @@ def _refused(listing: Listing, refusal: OperationRefused) -> str:
 
 def _operations(count: int) -> str:
     return "1 operazione" if count == 1 else f"{count} operazioni"
+
+
+def _done(connection: Connection, listing_id: int) -> None:
+    """The channel did what was asked of the listing, with its last change: nothing of it waits, and nothing is left
+    to Manuel."""
+    _forget(connection, listing_id)
+    manual_channels.taken_back(connection, listing_id)
 
 
 def _forget(connection: Connection, listing_id: int) -> None:

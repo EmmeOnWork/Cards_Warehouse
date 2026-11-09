@@ -11,12 +11,14 @@ import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
 from sqlalchemy import Connection
 
 from cards_warehouse import items, listing_texts, photos
+from cards_warehouse.channel_sales import Order
 from cards_warehouse.ebay import Account, AuthorizationRefused, EbayUnavailable, RequestRefused
 from cards_warehouse.exposure import ChannelUnavailable, Listing, OperationRefused, PublishRefused, Status
 from cards_warehouse.items import Card, Condition, Item, Kind
@@ -72,6 +74,8 @@ GRADERS = {
 }
 OTHER_GRADER = "2750123"
 GRADE = "27502"
+# The orders of a page, eBay's most: the orders made between two reads of the worker are far fewer.
+ORDERS_LIMIT = 200
 
 
 @dataclass(frozen=True)
@@ -135,7 +139,7 @@ class EbayChannel:
         """The listing on eBay at its price and copies, at once: the item's copies and the offer's, in one call.
         ChannelUnavailable when eBay does not answer."""
         sku = _sku(listing)
-        with self._changing():
+        with self._asking():
             self._send(
                 "POST",
                 self._account.api("/sell/inventory/v1/bulk_update_price_quantity"),
@@ -163,10 +167,32 @@ class EbayChannel:
         not on eBay, and has nothing to end. ChannelUnavailable when eBay does not answer."""
         if listing.status == Status.TO_PUBLISH:
             return True
-        with self._changing():
+        with self._asking():
             offer_id = self._offer_of(_sku(listing))
             self._send("POST", self._account.api(f"/sell/inventory/v1/offer/{offer_id}/withdraw"))
         return True
+
+    def orders(self, since: datetime | None) -> list[Order]:
+        """The lines of the orders made on eBay since then, or of all those eBay gives with no time, of the app's
+        listings: one Manuel made on eBay's own pages is his. ChannelUnavailable when eBay does not answer."""
+        params = {"limit": ORDERS_LIMIT}
+        if since is not None:
+            params["filter"] = f"creationdate:[{_filter_time(since)}..]"
+        with self._asking():
+            found = self._send("GET", self._account.api("/sell/fulfillment/v1/order"), params=params).json()
+        return [
+            Order(
+                number=order["orderId"],
+                line=line["lineItemId"],
+                listing_id=listing_id,
+                quantity=line["quantity"],
+                price_cents=int(Decimal(line["lineItemCost"]["value"]) * 100),
+                at=datetime.fromisoformat(order["creationDate"]),
+            )
+            for order in found["orders"]
+            for line in order["lineItems"]
+            if (listing_id := _listing_of(line)) is not None
+        ]
 
     def _offer_of(self, sku: str) -> str:
         """The offer of the item on eBay Italy: the app keeps only the listing's link, eBay finds the offer by item."""
@@ -234,10 +260,10 @@ class EbayChannel:
         return _checked(self._account.request(method, url, headers=TEXTS_LANGUAGE, **options))
 
     @contextmanager
-    def _changing(self) -> Iterator[None]:
-        """What goes wrong with an update or a close, as the exposure understands it: ChannelUnavailable when eBay
-        does not answer, and the same can be asked again later; OperationRefused, with why and what to do, when eBay
-        would refuse it again."""
+    def _asking(self) -> Iterator[None]:
+        """What goes wrong with an update, a close or a read of the orders, as the rest of the app understands it:
+        ChannelUnavailable when eBay does not answer, and the same can be asked again later; OperationRefused, with
+        why and what to do, when eBay would refuse it again."""
         if self._account is None:
             raise OperationRefused("eBay non è collegato: collegalo dal PC con make ebay-connect.")
         try:
@@ -261,6 +287,13 @@ class EbayChannel:
 def _sku(listing: Listing) -> str:
     """One item on eBay for each listing of the app: a listing closed and opened again starts clean."""
     return f"listing-{listing.id}"
+
+
+def _listing_of(line: dict) -> int | None:
+    """The app's listing a line of an order is of, by its item: None for a listing with no item of the app."""
+    sku = line.get("sku", "")
+    number = sku.removeprefix("listing-")
+    return int(number) if number != sku and number.isdigit() else None
 
 
 def _checked(response: httpx.Response) -> httpx.Response:
@@ -314,6 +347,11 @@ def _category_and_condition(item: Item) -> tuple[str, dict]:
 def grade_value(grade: Decimal) -> str:
     """The value of the grade descriptor: 10 is 275020, 9,5 is 275021, and so on down to 1, 2750218."""
     return f"27502{int((10 - grade) * 2)}"
+
+
+def _filter_time(at: datetime) -> str:
+    """A time as eBay's filters want it: UTC, to the millisecond."""
+    return f"{at.astimezone(UTC):%Y-%m-%dT%H:%M:%S}.{at.microsecond // 1000:03d}Z"
 
 
 def _value(cents: int) -> str:

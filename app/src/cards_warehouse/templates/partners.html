@@ -5,14 +5,22 @@
 {% block content %}
   <h1>Collaboratori</h1>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-  {% if partners %}
+  {% if balances %}
+    {# From the purchases and gradings each paid more or less than their share, and the sales each took the money of. #}
     <table>
       <thead>
-        <tr><th>Nome</th></tr>
+        <tr><th>Nome</th><th>Saldo</th></tr>
       </thead>
       <tbody>
-        {% for partner in partners %}
-          <tr><td><a href="/partners/{{ partner.id }}">{{ partner.name }}</a></td></tr>
+        {% for balance in balances %}
+          <tr>
+            <td><a href="/partners/{{ balance.partner_id }}">{{ balance.name }}</a></td>
+            <td>
+              {% if balance.cents > 0 %}Gli devi {{ balance.cents | euros }} €
+              {% elif balance.cents < 0 %}Ti deve {{ (-balance.cents) | euros }} €
+              {% else %}In pari{% endif %}
+            </td>
+          </tr>
         {% endfor %}
       </tbody>
     </table>

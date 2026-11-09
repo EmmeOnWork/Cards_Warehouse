@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -24,6 +25,7 @@ import httpx
 from sqlalchemy import Connection
 
 from cards_warehouse import channels, ebay_setup, exposure, items, photos, stock
+from cards_warehouse.channel_sales import Order
 from cards_warehouse.ebay import Account
 from cards_warehouse.ebay_channel import EbayChannel, SellerSetup
 from cards_warehouse.exposure import Listing, PublishRefused
@@ -31,6 +33,7 @@ from cards_warehouse.items import Card, Condition, Grading, Item, Kind, Sealed
 
 RECORDING = Path(__file__).parent / "ebay_responses" / "sandbox.json"
 TOKEN_PATH = "/identity/v1/oauth2/token"
+ORDERS_PATH = "/sell/fulfillment/v1/order"
 CONDITIONS_PATH = "/sell/metadata/v1/marketplace/EBAY_IT/get_item_condition_policies"
 # A picture that eBay can download over HTTPS, with no key: the bucket is private.
 PUBLIC_PHOTO = "https://ir.ebaystatic.com/cr/v/c1/ebay-logo-1-1200x630-margin.png"
@@ -58,6 +61,8 @@ class Outcome:
     again: str
     # What eBay answered on the conditions of single cards.
     conditions: dict
+    # The orders made since the scenario started: the box, bought by hand while it waited.
+    orders: list[Order]
 
 
 class PublicPhotos:
@@ -74,7 +79,17 @@ class PublicPhotos:
         return self._link
 
 
-def scenario(connection: Connection, account: Account, store, *, choose, postal_code: str, city: str) -> Outcome:
+def scenario(
+    connection: Connection,
+    account: Account,
+    store,
+    *,
+    choose,
+    postal_code: str,
+    city: str,
+    buy: Callable[[Listing], None],
+) -> Outcome:
+    started = datetime.now(UTC)
     values = ebay_setup.values_for_infisical(account, postal_code=postal_code, city=city, choose=choose)
     setup = SellerSetup(
         values["EBAY_FULFILLMENT_POLICY_ID"],
@@ -97,7 +112,10 @@ def scenario(connection: Connection, account: Account, store, *, choose, postal_
     except PublishRefused as refusal:
         again = str(refusal)
     conditions = account.request("GET", account.api(CONDITIONS_PATH), params={"filter": "categoryIds:{183454}"}).json()
-    return Outcome(values, published, again, conditions)
+    buy(published[0])
+    # Not those of the scenarios recorded before, on the same account.
+    orders = channel.orders(since=started)
+    return Outcome(values, published, again, conditions, orders)
 
 
 class Recording(httpx.BaseTransport):
@@ -111,15 +129,28 @@ class Recording(httpx.BaseTransport):
         response = self._real.handle_request(request)
         content = response.read()
         if request.url.path != TOKEN_PATH:
+            body = json.loads(content) if content else None
+            if request.url.path == ORDERS_PATH and response.is_success:
+                body = _without_buyers(body)
             self.exchanges.append(
-                {
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status": response.status_code,
-                    "body": json.loads(content) if content else None,
-                }
+                {"method": request.method, "path": request.url.path, "status": response.status_code, "body": body}
             )
         return response
+
+
+def _without_buyers(answer: dict) -> dict:
+    """eBay's answer with the orders, with only what the app reads of them: who bought, and where it goes, stay out of
+    the file, a test user of the sandbox or not."""
+    lines = ("lineItemId", "sku", "quantity", "lineItemCost")
+    orders = [
+        {
+            "orderId": order["orderId"],
+            "creationDate": order["creationDate"],
+            "lineItems": [{key: line[key] for key in lines if key in line} for line in order["lineItems"]],
+        }
+        for order in answer["orders"]
+    ]
+    return {**answer, "orders": orders}
 
 
 class Replay(httpx.BaseTransport):
@@ -162,6 +193,8 @@ def replayed(connection: Connection, recording: dict) -> Outcome:
         choose=lambda policies: recording["shipping_policy"],
         postal_code="00000",
         city="replayed",
+        # Bought already, on the sandbox: its order is among the answers.
+        buy=lambda box: None,
     )
     return outcome
 
@@ -207,7 +240,13 @@ def _record() -> None:
         with create_database_engine().begin() as connection:
             try:
                 outcome = scenario(
-                    connection, account, PublicPhotos(PUBLIC_PHOTO), choose=choose, postal_code=postal_code, city=city
+                    connection,
+                    account,
+                    PublicPhotos(PUBLIC_PHOTO),
+                    choose=choose,
+                    postal_code=postal_code,
+                    city=city,
+                    buy=_bought_by_hand,
                 )
             except ebay_setup.SetupFailed as failure:
                 sys.exit(str(failure))
@@ -217,6 +256,14 @@ def _record() -> None:
     for listing in outcome.listings:
         print(f"- {listing.status}: {listing.link or listing.problem}")
     print(f"- asked again: {outcome.again}")
+    for order in outcome.orders:
+        print(f"- order {order.number}: {order.quantity} of listing {order.listing_id}, {order.price_cents} cents")
+
+
+def _bought_by_hand(box: Listing) -> None:
+    """Manuel buys the box on the sandbox, signed in as a buyer of the sandbox: eBay has no API to buy with."""
+    print(f"\nBuy 1 box at {box.link}, signed in as a test buyer of the sandbox, not as the seller.")
+    input("Wait a minute after the purchase, for eBay to list the order, then press Enter: ")
 
 
 if __name__ == "__main__":

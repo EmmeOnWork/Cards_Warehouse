@@ -94,8 +94,9 @@ def test_a_row_taken_off_before_confirming_is_not_sold(signed_in_client):
     ]
 
 
-# Two ETBs entered, but there is one: until the double sales (task 24), nothing is sold, not even the busta, and the
-# page says which item has fewer copies than were entered.
+# Two ETBs entered, but there is one: nothing is sold, not even the busta, and the page says which item has fewer
+# copies than were entered. Not a double sale: Manuel had the ETB in his hands at the live, so the double sale is
+# another sale of it, to cancel first.
 def test_a_confirmation_of_more_copies_than_are_left_sells_nothing_and_says_of_which_item(signed_in_client):
     pack_page = signed_in_client.post("/items", data=BOOSTER_PACK).url.path
     signed_in_client.post("/items", data=ETB)

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from cards_warehouse import partners, purchases
+from cards_warehouse import balances, partners, purchases
 from cards_warehouse.pages import templates
 
 router = APIRouter()
@@ -69,11 +69,11 @@ def _name(form: PartnerForm) -> str:
 
 def _partner_list(request: Request, new: PartnerForm | None = None, error: str = "", status_code: int = 200):
     with request.app.state.engine.connect() as connection:
-        every = partners.every(connection)
+        every = balances.every(connection)
     return templates.TemplateResponse(
         request,
         "partners.html",
-        {"partners": every, "new": new or PartnerForm(), "error": error},
+        {"balances": every, "new": new or PartnerForm(), "error": error},
         status_code=status_code,
     )
 

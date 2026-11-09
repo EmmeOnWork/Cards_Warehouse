@@ -299,19 +299,30 @@ def cost_to_cover(connection: Connection, item_id: int) -> int | None:
 def of_items() -> Subquery:
     """The stock of each item with lots, for a query to join: `item_id`, the quantity `available`, and
     `cost_unknown` when a lot has a cost not known."""
-    per_lot = (
-        select(stock_lots.c.item_id, _quantity.label("available"), _cost.is_(None).label("cost_unknown"))
-        .join_from(stock_lots, stock_movements, stock_movements.c.lot_id == stock_lots.c.id)
-        .group_by(stock_lots.c.id)
-        .subquery()
-    )
+    per_lot = of_each_lot()
     return (
         select(
             per_lot.c.item_id,
             func.sum(per_lot.c.available).label("available"),
-            func.bool_or(per_lot.c.cost_unknown).label("cost_unknown"),
+            func.bool_or(per_lot.c.cost_cents.is_(None)).label("cost_unknown"),
         )
         .group_by(per_lot.c.item_id)
+        .subquery()
+    )
+
+
+def of_each_lot() -> Subquery:
+    """Each lot as it is now, for a query to join: `lot_id`, `item_id`, the copies `available`, and what they cost all
+    together, `cost_cents`: of a lot of the bulk, the cost moved with its cards. None when not known."""
+    return (
+        select(
+            stock_lots.c.id.label("lot_id"),
+            stock_lots.c.item_id,
+            _quantity.label("available"),
+            _cost.label("cost_cents"),
+        )
+        .join_from(stock_lots, stock_movements, stock_movements.c.lot_id == stock_lots.c.id)
+        .group_by(stock_lots.c.id)
         .subquery()
     )
 

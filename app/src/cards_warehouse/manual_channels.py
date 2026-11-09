@@ -99,6 +99,16 @@ def done(connection: Connection, action_id: int, link: str | None = None) -> Non
         exposure.closed(connection, listing_id)
 
 
+def taken_back(connection: Connection, listing_id: int) -> None:
+    """The action left to do on the listing goes, its listing as it is: the channel's API did what it asked after all,
+    with the last change."""
+    connection.execute(
+        update(pending_actions)
+        .where(pending_actions.c.listing_id == listing_id, pending_actions.c.done_at.is_(None))
+        .values(done_at=func.now())
+    )
+
+
 def pending(connection: Connection) -> dict[str, list[Action]]:
     """The actions left to do, by channel in the channels' order, the oldest first."""
     actions = _read(connection)

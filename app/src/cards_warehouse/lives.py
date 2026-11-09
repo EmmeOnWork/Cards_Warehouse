@@ -55,7 +55,8 @@ live_preset_items = Table(
 
 
 class NotEnoughCopies(Exception):
-    """A row sells more copies than its item has left: until the double sales, no row is sold."""
+    """A row sells more copies than its item has left: no row is sold. Manuel had the copies in his hands at the live,
+    so the double sale is another sale of them, to cancel first."""
 
     def __init__(self, name: str, available: int, quantity: int) -> None:
         super().__init__(f"{name}: {available} copies left, {quantity} sold")
@@ -224,7 +225,9 @@ def confirm(connection: Connection, inventory_id: int, operations: ChannelOperat
     for row in to_sell:
         # Each copy is a Tilt order of its own, and Tilt keeps the fixed part of its fee on each.
         fee = row.quantity * pricing.fee(row.unit_price_cents, tilt.fee)
-        sale = Sale(row.item_id, tilt.id, row.quantity, row.quantity * row.unit_price_cents, fee_cents=fee)
+        sale = Sale(
+            row.item_id, tilt.id, row.quantity, row.quantity * row.unit_price_cents, fee_cents=fee, may_be_double=False
+        )
         try:
             sale_id = sales.record(connection, sale, operations)
         except sales.NotEnoughCopies as refusal:

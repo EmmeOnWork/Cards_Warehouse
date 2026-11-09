@@ -3,8 +3,11 @@ It checks what the real one checks."""
 
 import base64
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from decimal import Decimal
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
@@ -39,6 +42,20 @@ CATEGORY_CONDITIONS = {
     "261044": {"NEW": set()},
 }
 TITLE_LIMIT = 80
+# Who buys on the fake eBay: what an order says of the buyer, which the app must keep nowhere.
+BUYER = {
+    "username": "giulia_compra_88",
+    "fullName": "Giulia Bianchi",
+    "addressLine1": "Via Garibaldi 12",
+    "city": "Torino",
+    "postalCode": "10122",
+    "phoneNumber": "3471234567",
+    "email": "giulia.bianchi@example.test",
+}
+# The orders of a page, when the request does not say: eBay gives up to 200.
+ORDERS_LIMIT = 50
+# How a date is written in the filter of the orders, as eBay wants it: UTC, to the millisecond.
+ORDERS_FILTER = re.compile(r"creationdate:\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z)\.\.\]")
 
 
 @dataclass(frozen=True)
@@ -95,10 +112,12 @@ class FakeEbay:
         self.listings: list[PublishedListing] = []
         # The listing each published offer is, by its place among the listings.
         self._live: dict[str, int] = {}
+        # Every order of a buyer, the oldest first, as the Fulfillment API returns it.
+        self._orders: list[dict] = []
+        # Since when each read of the orders asked for them, None for all of them.
+        self.orders_asked_since: list[datetime | None] = []
         # Every call to the APIs of a seller, answered or refused.
         self.requests_to_sell = 0
-        # Every request that reached eBay in an outage, and got no answer of eBay's.
-        self.unanswered = 0
 
     def http(self) -> httpx.Client:
         return httpx.Client(transport=self.transport())
@@ -143,14 +162,76 @@ class FakeEbay:
         self._live.clear()
         self.listings = [replace(listing, ended=True) for listing in self.listings]
 
+    # A buyer buys copies of a listing live, at its price: eBay takes them off the offer at once, and ends the listing
+    # with the last one. The number of the order.
+    def buy(self, listing_id: str, quantity: int, at: datetime | None = None) -> str:
+        offer_id = next(offer for offer, place in self._live.items() if self.listings[place].listing_id == listing_id)
+        at = at or datetime.now(UTC)
+        offer = self._offers[offer_id]
+        left = offer["availableQuantity"] - quantity
+        assert left >= 0, f"{offer['availableQuantity']} copies on sale"
+        offer["availableQuantity"] = left
+        self._inventory[offer["sku"]]["availability"] = {"shipToLocationAvailability": {"quantity": left}}
+        place = self._live[offer_id]
+        self.listings[place] = replace(self.listings[place], quantity=left, ended=left == 0)
+        if left == 0:
+            del self._live[offer_id]
+        value, currency = self.listings[place].price
+        line = {"legacyItemId": listing_id, "sku": offer["sku"], "title": self.listings[place].title}
+        return self._order(line, quantity, {"value": str(Decimal(value) * quantity), "currency": currency}, at)
+
+    # A buyer buys a listing Manuel made on eBay's own pages, not through the app: its line has no SKU. The number of
+    # the order.
+    def buy_listed_by_hand(self, title: str, price: str) -> str:
+        line = {"legacyItemId": f"{120_000_000_000 + len(self._orders) + 1}", "title": title}
+        return self._order(line, 1, {"value": price, "currency": "EUR"}, datetime.now(UTC))
+
+    # The order of one line, as the Fulfillment API returns it: with who bought, and where it goes.
+    def _order(self, line: dict, quantity: int, cost: dict, at: datetime) -> str:
+        number = len(self._orders) + 1
+        order_id = f"27-{13_000 + number:05d}-{40_000 + number:05d}"
+        address = {
+            "addressLine1": BUYER["addressLine1"],
+            "city": BUYER["city"],
+            "postalCode": BUYER["postalCode"],
+            "countryCode": "IT",
+        }
+        contact = {
+            "fullName": BUYER["fullName"],
+            "contactAddress": address,
+            "primaryPhone": {"phoneNumber": BUYER["phoneNumber"]},
+            "email": BUYER["email"],
+        }
+        self._orders.append(
+            {
+                "orderId": order_id,
+                "legacyOrderId": f"{line['legacyItemId']}-{2_900_000_000_000 + number}",
+                "creationDate": f"{at.astimezone(UTC):%Y-%m-%dT%H:%M:%S}.{at.microsecond // 1000:03d}Z",
+                "orderFulfillmentStatus": "NOT_STARTED",
+                "orderPaymentStatus": "PAID",
+                "buyer": {"username": BUYER["username"], "buyerRegistrationAddress": contact},
+                "pricingSummary": {"priceSubtotal": cost, "total": cost},
+                "cancelStatus": {"cancelState": "NONE_REQUESTED", "cancelRequests": []},
+                "fulfillmentStartInstructions": [{"shippingStep": {"shipTo": contact}}],
+                "lineItems": [
+                    {
+                        "lineItemId": f"{10_000_000_000_000 + number}",
+                        **line,
+                        "lineItemCost": cost,
+                        "quantity": quantity,
+                        "total": cost,
+                    }
+                ],
+            }
+        )
+        return order_id
+
     # "unreachable": no answer at all, as with no network. "broken": eBay answers, with an error page of its own.
     # None: eBay answers again.
     def fail(self, outage: str | None) -> None:
         self._outage = outage
 
     def _answer(self, request: httpx.Request) -> httpx.Response:
-        if self._outage:
-            self.unanswered += 1
         if self._outage == "unreachable":
             raise httpx.ConnectError("[Errno -3] Temporary failure in name resolution", request=request)
         if self._outage == "broken":
@@ -222,6 +303,8 @@ class FakeEbay:
             return self._image_from_url(json.loads(request.content))
         if request.url.host != self.host:
             return _refusal(404, 2002, "Resource not found.")
+        if (method, path) == ("GET", "/sell/fulfillment/v1/order"):
+            return self._orders_since(request.url.params)
         if path.startswith("/sell/account/v1/"):
             return self._account_api(method, path.removeprefix("/sell/account/v1/"), request)
         if method == "POST" and path.startswith("/sell/inventory/v1/location/"):
@@ -363,6 +446,20 @@ class FakeEbay:
                 responses.append({"statusCode": 200, "sku": change["sku"], "offerId": offer["offerId"]})
         return httpx.Response(200, json={"responses": responses})
 
+    # The orders made since the date of the filter, or every one with no filter, the oldest first: a page of them.
+    def _orders_since(self, params: httpx.QueryParams) -> httpx.Response:
+        found, start = self._orders, None
+        if "filter" in params:
+            since = ORDERS_FILTER.fullmatch(params["filter"])
+            if since is None:
+                return _refusal(400, 30800, "Invalid filter.", domain="API_FULFILLMENT")
+            start = datetime.fromisoformat(since.group(1))
+            found = [order for order in found if datetime.fromisoformat(order["creationDate"]) >= start]
+        self.orders_asked_since.append(start)
+        limit = int(params.get("limit", ORDERS_LIMIT))
+        page = found[:limit]
+        return httpx.Response(200, json={"total": len(found), "limit": limit, "offset": 0, "orders": page})
+
     # The listing ends, and the offer stays, unpublished. Only a published offer can be withdrawn.
     def _withdraw(self, offer_id: str) -> httpx.Response:
         if offer_id not in self._live:
@@ -407,20 +504,22 @@ class FakeEbay:
         if not product.get("title") or len(product["title"]) > TITLE_LIMIT:
             return _refusal(400, 25002, "A user error has occurred. The title is missing or too long.")
         price = offer["pricingSummary"]["price"]
-        listing_id = f"{110_000_000_000 + len(self.listings) + 1}"
-        self._live[offer_id] = len(self.listings)
-        self.listings.append(
-            PublishedListing(
-                listing_id=listing_id,
-                category_id=offer["categoryId"],
-                title=product["title"],
-                description=offer.get("listingDescription") or product.get("description", ""),
-                price=(price["value"], price["currency"]),
-                quantity=offer["availableQuantity"],
-                photos=[self._images[image] for image in images],
-                condition=item["condition"],
-                condition_descriptors=descriptors,
-            )
+        # An offer published already: its listing, live, takes the values, and keeps its number.
+        if offer_id not in self._live:
+            self._live[offer_id] = len(self.listings)
+            self.listings.append(None)
+        at = self._live[offer_id]
+        listing_id = f"{110_000_000_000 + at + 1}"
+        self.listings[at] = PublishedListing(
+            listing_id=listing_id,
+            category_id=offer["categoryId"],
+            title=product["title"],
+            description=offer.get("listingDescription") or product.get("description", ""),
+            price=(price["value"], price["currency"]),
+            quantity=offer["availableQuantity"],
+            photos=[self._images[image] for image in images],
+            condition=item["condition"],
+            condition_descriptors=descriptors,
         )
         return httpx.Response(200, json={"listingId": listing_id, "warnings": []})
 

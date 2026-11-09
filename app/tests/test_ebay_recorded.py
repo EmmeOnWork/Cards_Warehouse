@@ -26,7 +26,7 @@ from tests.ebay_recording import (
     replayed,
     scenario,
 )
-from tests.fake_ebay import CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, FakeEbay
+from tests.fake_ebay import BUYER, CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, FakeEbay
 from tests.test_access import FakeClock
 
 on_the_sandbox = pytest.mark.skipif(not RECORDING.exists(), reason="no answers recorded yet: make ebay-record")
@@ -65,6 +65,18 @@ def test_the_descriptors_sent_for_single_cards_are_among_those_ebay_lists(connec
     assert sent <= set(_values_listed(outcome.conditions))
 
 
+# The box bought by hand on the sandbox, by a buyer of the sandbox, while make ebay-record waited: eBay's order reads as
+# one copy of the box, at its price.
+@on_the_sandbox
+def test_the_box_bought_on_the_sandbox_reads_as_an_order_of_one_copy_at_its_price(connection):
+    outcome = replayed(connection, recorded())
+
+    box = outcome.listings[0]
+    assert [(order.listing_id, order.quantity, order.price_cents) for order in outcome.orders] == [
+        (box.id, 1, box.price_cents)
+    ]
+
+
 # make ebay-record on the fake eBay, then the file it writes replayed on a database just as new: the same outcome.
 def test_answers_recorded_from_an_ebay_replay_to_the_same_outcome(connection):
     fake_ebay = FakeEbay(seller_set_up=False, photos=lambda link: b"photo")
@@ -87,13 +99,17 @@ def test_answers_recorded_from_an_ebay_replay_to_the_same_outcome(connection):
         choose=lambda policies: parcel,
         postal_code="20121",
         city="Milano",
+        buy=lambda box: fake_ebay.buy(box.link.rsplit("/", 1)[1], quantity=1),
     )
     written = json.loads(document(recording, live, [parcel]))
     # The items and their listings gone, and their numbers from 1 again, as on the database of a test.
     connection.execute(text("TRUNCATE items RESTART IDENTITY CASCADE"))
 
     assert replayed(connection, written) == live
+    assert [(order.listing_id, order.quantity) for order in live.orders] == [(live.listings[0].id, 1)]
     assert "access-token" not in json.dumps(written)
+    # The buyer's, test user of the sandbox or not, stays out of the file, which goes in Git.
+    assert [value for value in BUYER.values() if value in json.dumps(written)] == []
 
 
 def _values_listed(answer) -> list[str]:

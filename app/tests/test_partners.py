@@ -14,7 +14,7 @@ from tests.pages import links, table_rows
 def test_a_partner_added_from_the_app_is_offered_at_once_to_share_a_purchase(signed_in_client):
     signed_in_client.post("/partners", data={"name": "Luca"})
 
-    assert table_rows(signed_in_client.get("/partners").text) == [["Luca"]]
+    assert table_rows(signed_in_client.get("/partners").text) == [["Luca", "In pari"]]
     assert [row[0] for row in table_rows(signed_in_client.get("/items/new").text)] == ["Manuel", "Luca"]
 
 
@@ -25,7 +25,7 @@ def test_a_partner_is_renamed_from_the_app(signed_in_client):
 
     signed_in_client.post(lucca, data={"name": "Luca"})
 
-    assert table_rows(signed_in_client.get("/partners").text) == [["Luca"]]
+    assert table_rows(signed_in_client.get("/partners").text) == [["Luca", "In pari"]]
 
 
 # Two partners with one name could not be told apart on a purchase.
@@ -42,4 +42,4 @@ def test_a_name_taken_or_empty_is_refused_when_adding_or_renaming(signed_in_clie
         assert refused.status_code == 422
         assert reason in html.unescape(refused.text)
 
-    assert table_rows(signed_in_client.get("/partners").text) == [["Luca"], ["Marco"]]
+    assert table_rows(signed_in_client.get("/partners").text) == [["Luca", "In pari"], ["Marco", "In pari"]]

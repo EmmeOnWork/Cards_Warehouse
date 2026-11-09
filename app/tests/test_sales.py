@@ -12,6 +12,7 @@ from cards_warehouse import gradings, items, manual_channels, sales, stock
 from cards_warehouse.items import Card, Condition, Item, Kind
 from cards_warehouse.pricing import Margin
 from cards_warehouse.sales import AlreadyCancelled, Cancellation, NotEnoughCopies, Sale
+from cards_warehouse.stock import Cause
 from tests.test_exposure import channel_ids
 
 
@@ -68,15 +69,45 @@ def test_a_sale_of_a_copy_whose_cost_is_not_known_has_no_margin(connection):
     assert (recorded.cost_cents, recorded.margin) == (None, None)
 
 
-# Until the double sales (task 24): the stock would go below zero.
-def test_a_sale_of_more_copies_than_are_left_is_refused_and_takes_nothing(connection):
+# The only copy went on Vinted, and was bought on Tilt too: that sale takes nothing, and the stock stays at zero.
+def test_a_sale_of_copies_sold_out_is_a_double_sale_that_takes_nothing(connection):
+    card = a_card(connection, copies=1, unit_cost_cents=5000)
+    vinted, tilt = channel_ids(connection, "Vinted", "Tilt")
+    sales.record(connection, Sale(card, vinted, 1, 6000), manual_channels.MANUAL)
+
+    double = sales.record(connection, Sale(card, tilt, 1, 6000), manual_channels.MANUAL)
+
+    recorded = sales.one(connection, double)
+    assert (recorded.double, recorded.cost_cents, recorded.margin) == (True, None, None)
+    assert stock.available(connection, card) == 0
+    assert [movement.cause for movement in stock.history(connection, card)] == [Cause.LOAD, Cause.SALE]
+
+
+# Two copies left, three sold on Tilt at 90,00, which keeps 2,30, with 3,00 of shipping: the two there are a sale of
+# 60,00 with 1,53 of the fee and all the shipping, the third a double sale of the rest, in the same order.
+def test_a_sale_of_more_copies_than_are_left_sells_those_there_are_and_the_rest_is_a_double_sale(connection):
     card = a_card(connection, copies=2, unit_cost_cents=3000)
 
-    with pytest.raises(NotEnoughCopies) as refused:
-        sales.record(connection, Sale(card, tilt(connection), 3, 9000), manual_channels.MANUAL)
+    sale = sales.record(connection, Sale(card, tilt(connection), 3, 9000, shipping_cents=300), manual_channels.MANUAL)
 
-    assert refused.value.available == 2
-    assert stock.available(connection, card) == 2
+    sold = sales.one(connection, sale)
+    double = sales.one(connection, sold.double_part)
+    assert (sold.double, sold.quantity, sold.price_cents, sold.fee_cents, sold.shipping_cents, sold.cost_cents) == (
+        False,
+        2,
+        6000,
+        153,
+        300,
+        6000,
+    )
+    assert (double.double, double.quantity, double.price_cents, double.fee_cents, double.shipping_cents) == (
+        True,
+        1,
+        3000,
+        77,
+        0,
+    )
+    assert stock.available(connection, card) == 0
 
 
 # The lot chosen has one copy, the item three: two copies cannot come from that lot.
@@ -134,6 +165,51 @@ def test_a_sale_cancelled_stays_with_the_cause_and_the_note_of_its_cancellation(
 
     cancelled = sales.one(connection, sale).cancelled
     assert (cancelled.cause, cancelled.note) == (Cancellation.ORDER_CANCELLED, "Ha cambiato idea")
+
+
+# The copy sold on Tilt had gone on Vinted, not recorded yet: the Tilt order is cancelled as a double sale, not as a
+# return nor as an order the buyer cancelled, and the copy goes back, for the Vinted sale to take.
+def test_a_sale_cancelled_as_a_double_sale_puts_its_copy_back_and_keeps_that_cause(connection):
+    card = a_card(connection, copies=1, unit_cost_cents=5000)
+    sale = sales.record(connection, Sale(card, tilt(connection), 1, 6000), manual_channels.MANUAL)
+
+    sales.cancel(connection, sale, Cancellation.DOUBLE_SALE)
+
+    assert sales.one(connection, sale).cancelled.cause == Cancellation.DOUBLE_SALE
+    assert stock.available(connection, card) == 1
+
+
+# Three orders went wrong on Mew ex: one found it sold out, and was cancelled then as a double sale; one was recorded
+# before the copy sold elsewhere was, and was cancelled as a double sale; one of three copies, with two left, was
+# cancelled whole as a double sale, both its parts. Each is one double sale, the newest first. A return is none.
+def test_each_order_that_found_its_copies_sold_already_is_one_double_sale_even_once_cancelled(connection):
+    card = a_card(connection, copies=1, unit_cost_cents=5000)
+    vinted, tilt = channel_ids(connection, "Vinted", "Tilt")
+    sales.record(connection, Sale(card, vinted, 1, 6000), manual_channels.MANUAL)
+    sold_out = sales.record(connection, Sale(card, tilt, 1, 6000), manual_channels.MANUAL)
+    sales.cancel(connection, sold_out, Cancellation.DOUBLE_SALE)
+    stock.load(connection, card, quantity=1, unit_cost_cents=5000)
+    recorded_first = sales.record(connection, Sale(card, tilt, 1, 6000), manual_channels.MANUAL)
+    sales.cancel(connection, recorded_first, Cancellation.DOUBLE_SALE)
+    stock.load(connection, card, quantity=1, unit_cost_cents=5000)
+    returned = sales.record(connection, Sale(card, vinted, 1, 6000), manual_channels.MANUAL)
+    sales.cancel(connection, returned, Cancellation.RETURN)
+    partial = sales.record(connection, Sale(card, tilt, 3, 18000), manual_channels.MANUAL)
+    sales.cancel(connection, partial, Cancellation.DOUBLE_SALE)
+    sales.cancel(connection, sales.one(connection, partial).double_part, Cancellation.DOUBLE_SALE)
+
+    doubles = sales.doubles(connection)
+
+    assert [(double.channel, double.name, double.quantity) for double in doubles] == [
+        ("Tilt", "Mew ex", 1),
+        ("Tilt", "Mew ex", 1),
+        ("Tilt", "Mew ex", 1),
+    ]
+    assert [double.sale_id for double in doubles] == [
+        sales.one(connection, partial).double_part,
+        recorded_first,
+        sold_out,
+    ]
 
 
 # Its copies went back once: a second cancellation would give them back again, and the stock would count them twice.

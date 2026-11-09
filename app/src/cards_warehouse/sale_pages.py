@@ -7,7 +7,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from cards_warehouse import channels, exposure, items, listing_pages, manual_channels, sales, stock
+from cards_warehouse import balances, channels, exposure, items, listing_pages, manual_channels, partners, sales, stock
 from cards_warehouse.exposure import NoPrice, NothingToSell
 from cards_warehouse.items import Kind
 from cards_warehouse.money import parse_euros
@@ -18,6 +18,7 @@ from cards_warehouse.sales import AlreadyCancelled, Cancellation, NotEnoughCopie
 templates.env.globals["cancellation_causes"] = {
     Cancellation.RETURN: "Reso",
     Cancellation.ORDER_CANCELLED: "Ordine cancellato",
+    Cancellation.DOUBLE_SALE: "Doppia vendita",
 }
 
 router = APIRouter()
@@ -38,6 +39,8 @@ class SaleForm(BaseModel):
     # The number of the lot within the item. Empty: the oldest first.
     lot: str = ""
     note: str = ""
+    # The partner who sold it from their own account and took the money. Empty: Manuel.
+    collected_by: str = ""
 
 
 class CancellationForm(BaseModel):
@@ -63,7 +66,9 @@ def record_sale(request: Request, item_id: int, form: Annotated[SaleForm, Form()
     try:
         with request.app.state.engine.begin() as connection:
             item = items.find(connection, item_id)
-            sale = _read(form, item_id, stock.lots(connection, item_id))
+            if item is None:
+                raise HTTPException(status_code=404)
+            sale = _read(form, item, stock.lots(connection, item_id))
             sale_id = sales.record(connection, sale, request.app.state.channel_operations)
     except _Refused as refusal:
         error = str(refusal)
@@ -71,9 +76,8 @@ def record_sale(request: Request, item_id: int, form: Annotated[SaleForm, Form()
         if form.lot:
             error = f"Il lotto {form.lot} ha {copies(refusal.available)}: non puoi venderne {form.quantity}."
         else:
-            # As the page says what is left.
-            left = "Carte nel bulk" if item and item.kind == Kind.BULK else "Copie disponibili"
-            error = f"{left}: {refusal.available}. Non puoi venderne {form.quantity}."
+            # Of the bulk, as its page says what is left: elsewhere copies short are a double sale.
+            error = f"Carte nel bulk: {refusal.available}. Non puoi venderne {form.quantity}."
     else:
         return RedirectResponse(f"/sales/{sale_id}", status_code=303)
     return _page(request, item_id, form, error=error, status_code=422)
@@ -82,6 +86,13 @@ def record_sale(request: Request, item_id: int, form: Annotated[SaleForm, Form()
 @router.get("/sales/{sale_id}")
 def sold_page(request: Request, sale_id: int):
     return _sold_page(request, sale_id, CancellationForm())
+
+
+@router.get("/double-sales")
+def double_sales(request: Request):
+    with request.app.state.engine.connect() as connection:
+        doubles = sales.doubles(connection)
+    return templates.TemplateResponse(request, "double_sales.html", {"doubles": doubles})
 
 
 @router.post("/sales/{sale_id}/cancellation")
@@ -121,6 +132,8 @@ def _sold_page(request: Request, sale_id: int, form: CancellationForm, error: st
         actions = manual_channels.of_item(connection, sale.item_id)
         # Once cancelled: where its copies, back in the stock, may go on sale again.
         to_put_back = exposure.to_put_back(connection, sale.item_id) if sale.cancelled else []
+        # While it stands, and only when a partner has a part of it or took the money: a sale all Manuel's says nothing.
+        parts = None if sale.cancelled else balances.of_sale(connection, sale_id)
     return templates.TemplateResponse(
         request,
         "sold.html",
@@ -130,6 +143,7 @@ def _sold_page(request: Request, sale_id: int, form: CancellationForm, error: st
             "bulk": item.kind == Kind.BULK,
             "actions": actions,
             "to_put_back": to_put_back,
+            "parts": parts if parts and parts.with_partners else None,
             "form": form,
             "error": error,
         },
@@ -137,7 +151,7 @@ def _sold_page(request: Request, sale_id: int, form: CancellationForm, error: st
     )
 
 
-def _read(form: SaleForm, item_id: int, lots: list[stock.Lot]) -> Sale:
+def _read(form: SaleForm, item: items.Listed, lots: list[stock.Lot]) -> Sale:
     if not form.channel.isdigit():
         raise _Refused("Scegli il canale della vendita.")
     lot_id = None
@@ -156,7 +170,7 @@ def _read(form: SaleForm, item_id: int, lots: list[stock.Lot]) -> Sale:
     else:
         quantity = _quantity(form.quantity)
     return Sale(
-        item_id,
+        item.id,
         int(form.channel),
         quantity,
         price,
@@ -164,6 +178,8 @@ def _read(form: SaleForm, item_id: int, lots: list[stock.Lot]) -> Sale:
         shipping_cents=_euros(form.shipping, "la spedizione") if form.shipping.strip() else 0,
         lot_id=lot_id,
         note=form.note.strip(),
+        collected_by=int(form.collected_by) if form.collected_by.isdigit() else None,
+        may_be_double=item.kind != Kind.BULK,
     )
 
 
@@ -190,12 +206,14 @@ def _page(request: Request, item_id: int, form: SaleForm, error: str = "", statu
         if item is None:
             raise HTTPException(status_code=404)
         every = channels.every(connection)
+        # Who may have taken the money besides Manuel: a choice only when there is one to make.
+        every_partner = partners.every(connection)
         # A choice only when there is one to make. Never of the bulk, whose cards go from the oldest lot.
         lots = [lot for lot in stock.lots(connection, item_id) if lot.available]
         chosen = lots if len(lots) > 1 and item.kind != Kind.BULK else []
     return templates.TemplateResponse(
         request,
         "sale.html",
-        {"item": item, "channels": every, "lots": chosen, "form": form, "error": error},
+        {"item": item, "channels": every, "partners": every_partner, "lots": chosen, "form": form, "error": error},
         status_code=status_code,
     )
