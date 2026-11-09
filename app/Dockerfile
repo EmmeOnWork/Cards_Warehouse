@@ -39,6 +39,9 @@ CMD ["bash"]
 
 # --- runtime: only the virtual environment, no uv, no sources ---
 FROM python:3.12-slim-trixie
+# Debian ships security fixes days before Docker Hub rebuilds this base: take them now,
+# or the scan gate holds every release until the rebuild (November 2026, zlib1g).
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 # Numeric user, so Kubernetes can verify runAsNonRoot.
