@@ -17,11 +17,12 @@ tf-check: ## Check Terraform format and validity, then run the Terraform tests
 # The values Argo CD passes to a chart (valuesObject) are not checked: no schema describes them.
 CRD_SCHEMAS := https://raw.githubusercontent.com/datreeio/CRDs-catalog/501527ab9c40c827144c8f45945b25a023e344ce/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
 KUBECONFORM := kubeconform -strict -summary -kubernetes-version 1.34.3 -schema-location default -schema-location "$(CRD_SCHEMAS)"
-chart-check: ## Lint the chart, and check what it renders and the manifests in gitops/ against the Kubernetes schemas
+chart-check: ## Lint the chart, check what it renders and the manifests in gitops/ against the Kubernetes schemas, run its tests
 	$(TOOLBOX) bash -o pipefail -c '\
 	  helm lint --strict chart --set image.tag=check && \
 	  helm template cards-warehouse chart --set image.tag=check | $(KUBECONFORM) && \
-	  $(KUBECONFORM) gitops'
+	  $(KUBECONFORM) gitops && \
+	  bash chart/tests/ebay-environment.sh'
 
 platform-up: ## Create the kind cluster, Argo CD and its root application (after aws login)
 	$(TOOLBOX) sh -c "terraform -chdir=infra/platform init -input=false && terraform -chdir=infra/platform apply -auto-approve -input=false"

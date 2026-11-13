@@ -10,19 +10,20 @@ NOW = datetime(2026, 10, 23, 15, 30, tzinfo=UTC)
 
 
 # Manuel opens the link, agrees on eBay, and pastes the address of the page where the browser lands.
-# What comes back is what goes into Infisical: the durable credential, and the day it ends.
+# What comes back is what goes into Infisical: the durable credential, and the day it ends. Not the environment:
+# the folder they go in is the environment's, and the chart tells the app which (ebay.environment).
 def test_connecting_the_account_gives_the_values_to_put_in_infisical():
     values = connect(FakeEbay())
 
     assert values == {
-        "EBAY_ENVIRONMENT": "sandbox",
         "EBAY_REFRESH_TOKEN": REFRESH_TOKEN,
         # 47,304,000 s after the grant, as eBay answered.
         "EBAY_AUTHORIZATION_EXPIRES": "2028-04-23T03:30:00Z",
     }
 
 
-# Pasted into Infisical as they are, next to the keys of the developer portal, they connect the app.
+# Pasted into Infisical as they are, next to the keys of the developer portal, they connect the app on the eBay the
+# chart names.
 @pytest.mark.usefixtures("database")
 def test_the_values_put_in_infisical_connect_the_app(monkeypatch):
     fake_ebay = FakeEbay()
@@ -30,6 +31,7 @@ def test_the_values_put_in_infisical_connect_the_app(monkeypatch):
         monkeypatch.setenv(name, value)
     monkeypatch.setenv("EBAY_CLIENT_ID", CLIENT_ID)
     monkeypatch.setenv("EBAY_CLIENT_SECRET", CLIENT_SECRET)
+    monkeypatch.setenv("EBAY_ENVIRONMENT", "sandbox")
 
     page = ebay_page(signed_in(fake_ebay))
 

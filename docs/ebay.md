@@ -9,7 +9,7 @@ The app acts on the account through eBay's OAuth, with an authorization Manuel g
 ```
 make ebay-connect (PC) ─► link ─► browser: sign in on eBay, agree ─► eBay's own page, a code in its address
         ◄──────────── address pasted back ◄─────────────────────────────────┘
-        └─► code traded for the durable credential ─► printed once ─► pasted into Infisical, /app
+        └─► code traded for the durable credential ─► printed once ─► pasted into Infisical, /ebay/<environment>
                                                                           │
 app (cluster) ◄── operator ◄──────────────────────────────────────────────┘
    └─► asks eBay for a token of 2 hours when a call needs one, reuses it until 5 minutes before its end
@@ -22,11 +22,10 @@ app (cluster) ◄── operator ◄──────────────�
 
 ## The values in Infisical
 
-All in the project `cards-warehouse`, environment `prod`, folder `/app`. The chart lists them as optional: until they exist, the app starts and the page says *Non collegato*.
+In the project `cards-warehouse`, environment `prod`, a folder for each eBay: `/ebay/sandbox` and `/ebay/production`, with the same names in both. Sandbox and production have separate keysets, credentials, policies and locations. The chart lists the names as optional: until they exist, the app starts and the page says *Non collegato*.
 
 | Name | What it is | Where it comes from |
 |---|---|---|
-| `EBAY_ENVIRONMENT` | `sandbox` or `production` | `make ebay-connect` |
 | `EBAY_CLIENT_ID` | The App ID of the keyset | Developer portal, *Application Keys* |
 | `EBAY_CLIENT_SECRET` | The Cert ID of the same keyset | Developer portal, *Application Keys* |
 | `EBAY_REFRESH_TOKEN` | The durable credential | `make ebay-connect` |
@@ -36,14 +35,14 @@ All in the project `cards-warehouse`, environment `prod`, folder `/app`. The cha
 | `EBAY_RETURN_POLICY_ID` | The return policy | `make ebay-setup` |
 | `EBAY_LOCATION_KEY` | The place the goods leave from, `magazzino` | `make ebay-setup` |
 
-Sandbox and production have separate keysets, credentials, policies and locations. Switching to the real account (task 37) means replacing all nine values together: `make ebay-connect`, then `make ebay-setup`, both on `production`.
+**Which eBay the app works on is not a secret**: it is `ebay.environment` in [the chart's values](../chart/values.yaml), `sandbox` or `production`. The Infisical operator copies the folder of that one only, so the pods never hold the keys of the other, and the chart gives the app `EBAY_ENVIRONMENT`. Switching is a commit: [below](#switching-to-the-real-account). Any other value stops the render, and Argo CD shows the sync failed with why.
 
 ## Before the first connection
 
 Once, on [developer.ebay.com](https://developer.ebay.com/develop/get-started):
 
 1. Create the developer account.
-2. In *Application Keys*, create the **Sandbox** keyset. Put its App ID in Infisical as `EBAY_CLIENT_ID` and its Cert ID as `EBAY_CLIENT_SECRET`.
+2. In *Application Keys*, create the **Sandbox** keyset. Put its App ID in Infisical, `/ebay/sandbox`, as `EBAY_CLIENT_ID` and its Cert ID as `EBAY_CLIENT_SECRET`.
 3. Create a **sandbox test user**: *User Access Tokens*, then *Register a new Sandbox user* on the *User Tokens (eBay Sign-In)* page ([eBay's guide](https://developer.ebay.com/api-docs/static/gs_create-a-test-sandbox-user.html)). The sandbox has accounts of its own, separate from ebay.com, and the real account does not exist there: the app is tried on the sandbox before it touches the real listings. eBay puts `TESTUSER_` before the name you choose. The email must not belong to another test user. The password needs 8 to 64 characters, with at least a letter, a number and a symbol.
 4. In *User Tokens*, under *Get a Token from eBay via Your Application*, add an eBay redirect URL: eBay creates the **RuName**, the name it uses in place of a return address. Enable OAuth for it and leave the accept and decline URLs empty. eBay then uses pages of its own, so nothing on the PC or in the cluster needs an address on the internet.
 
@@ -54,7 +53,7 @@ These steps were written on 2026-10-23 from the sources below, before the first 
 1. Run `make ebay-connect`. It asks for the environment (`sandbox` unless you type `production`), the client ID, the client secret (not shown as you type it) and the RuName.
 2. Open the link it prints in a **private window** of the browser, so that no eBay session already open stands in for the account. Sign in with the sandbox test user, by its whole name, `TESTUSER_` included, and agree. The email and password of ebay.com are refused there. In production, sign in with the real account.
 3. eBay leaves you on a page of its own. Copy the **whole address** from the address bar and paste it back within 5 minutes: the code in it lasts 299 seconds and works once.
-4. Put the three values it prints in Infisical, replacing the old ones. Within a minute the operator copies them into the cluster and restarts the app. The eBay page then says *Collegato*, with the new end date.
+4. Put the two values it prints in Infisical, in the folder it names, `/ebay/sandbox` or `/ebay/production`, replacing the old ones. When it is the folder of the eBay the app works on, within a minute the operator copies them into the cluster and restarts the app. The eBay page then says *Collegato*, with the new end date.
 
 A code pasted late, or twice, makes eBay refuse it (`invalid_grant`): start again from step 1. A typing error in the client ID or secret ends the same way, with `invalid_client`.
 
@@ -70,7 +69,7 @@ A listing needs three business policies of the seller on eBay Italy (shipping, p
    - takes the shipping policy, and asks which one when there are several;
    - takes the first payment and return policy on eBay Italy, or makes *Pagamento (app)* and *Nessun reso (app)* when there are none. A private seller does not have to accept returns. Change the one it made on eBay's page if you want them;
    - makes the location `magazzino`, if eBay does not have it.
-3. Put the four values it prints in Infisical, next to the others.
+3. Put the four values it prints in Infisical, in the folder it names, next to the others.
 
 Run again, it makes nothing twice: what eBay has already is taken.
 
@@ -129,6 +128,20 @@ The tests run against a fake eBay (`tests/fake_ebay.py`), and also against the a
 
 The three listings stay on the sandbox.
 
+## Switching to the real account
+
+Task 37, once the app has worked on the sandbox. The sandbox's values stay in `/ebay/sandbox`, and going back is the same commit with `sandbox`.
+
+**Once, before pushing the chart with the folders** (written on 2026-11-09), if the eBay values are still in `/app`: create `/ebay/sandbox` and `/ebay/production` in Infisical, move the eBay values of `/app` into `/ebay/sandbox`, and delete them from `/app`, `EBAY_ENVIRONMENT` included, which the chart now gives. The operator merges `/app` and the eBay folder into one Secret: a value left in `/app` could stand in for the folder's.
+
+Then, for the real account:
+
+1. **The production keyset.** In *Application Keys* on the developer portal, the **Production** keyset. To activate it, eBay asks either to receive the notifications of deleted accounts or to opt out of them: the choice decided in task 31. Put its App ID (with `-PRD-` in it) and its Cert ID in `/ebay/production`, as `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET`. Make the production RuName as in [step 4 above](#before-the-first-connection), in the production keyset's *User Tokens*.
+2. **Connect** with `make ebay-connect` on `production`, signed in with the real account, and **set up the seller** with the shipping policy in *Seller Hub* and `make ebay-setup` on `production`: the values go in `/ebay/production`. The app is still on the sandbox, and does not see them yet.
+3. **Leave nothing on the sandbox.** In the app, *Ritira da eBay* each listing it published on the sandbox, and wait until the home has no line of operations waiting on eBay. After the switch the app would ask the real eBay about offers that exist only on the sandbox, and eBay would refuse each change.
+4. **The switch**: `ebay.environment: production` in [chart/values.yaml](../chart/values.yaml), commit and push. Once the pipeline has moved `production`, Argo CD renders the chart again, the operator copies `/ebay/production`, and the app and the worker restart with it. The eBay page says *Collegato* and *Reale*. Within the first minute it can say instead that eBay refuses the keys, and the home that the orders are not read: the pods restart with `production` at once, and with the sandbox's keys until the operator has copied the new folder and restarted them again.
+5. **The listings made by hand on eBay**, before the app: end each one on eBay's pages, then put its item on sale on eBay from the app. There is no migration: the app knows only the listings it published.
+
 ## Renewal
 
 The durable credential is not renewed by use: it ends on the day the eBay page shows. Before that day, connect again as above. A new consent gives a new credential and a new date.
@@ -140,7 +153,7 @@ If the page says *eBay rifiuta la richiesta (invalid_client)*, the keys in Infis
 ## Cutting it off
 
 - **On eBay**, remove the app from the applications with access to the account. A token the app already holds keeps working until its 2 hours end. After that the app asks for a new one, eBay refuses, and the page shows the warning.
-- **On the app's side**, delete `EBAY_REFRESH_TOKEN` from Infisical: the app restarts and the page says *Non collegato*.
+- **On the app's side**, delete `EBAY_REFRESH_TOKEN` from the folder of the eBay the app works on: the app restarts and the page says *Non collegato*.
 
 ## What was checked (task 31, 2026-10-23)
 

@@ -41,6 +41,7 @@
 
 {% block content %}
   <h1>Conti</h1>
+  <p><a href="/reports/numbers">Numeri del curriculum</a></p>
   <section>
     <h2>Margine del mese</h2>
     <p>
@@ -79,6 +80,11 @@
           {{ margin_row(shown | days, shown, warning) }}
         </tbody>
       </table>
+      <p>
+        <a href="/reports/sales.csv?{{ {'first_day': shown.first_day, 'last_day': shown.last_day} | urlencode }}">
+          Scarica le vendite del periodo (CSV)
+        </a>
+      </p>
     {% endif %}
   </section>
   <section>

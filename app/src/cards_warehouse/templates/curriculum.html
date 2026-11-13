@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Numeri del curriculum · Magazzino{% endblock %}
+
+{% block content %}
+  <section>
+    <h1>Numeri del curriculum</h1>
+    <p>Contati dal database, dal primo giorno all'ultimo, compresi: se non scegli un periodo, dal primo giorno d'uso a oggi.</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="get" action="/reports/numbers">
+      <label for="first_day">Dal</label>
+      <input id="first_day" name="first_day" type="date" required value="{{ form.first_day }}">
+      <label for="last_day">Al</label>
+      <input id="last_day" name="last_day" type="date" required value="{{ form.last_day }}">
+      <button type="submit">Mostra</button>
+    </form>
+    {% if numbers %}
+      <table>
+        <thead>
+          <tr><th>Numero</th><th class="number">Valore</th></tr>
+        </thead>
+        <tbody>
+          {% for field, (name, _) in described.items() %}
+            {% set value = numbers[field] %}
+            {# A number of channels is told with their names. #}
+            <tr>
+              <td>{{ name }}</td>
+              {% if value is iterable %}
+                <td class="number">{{ value | length }}{% if value %} <br><span class="tag">{{ value | join(", ") }}</span>{% endif %}</td>
+              {% else %}
+                <td class="number">{{ value }}</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p>
+        <a href="/reports/numbers.json?{{ {'first_day': numbers.first_day, 'last_day': numbers.last_day} | urlencode }}">Scarica in JSON</a>,
+        da registrare nel repository con la data.
+      </p>
+    {% endif %}
+  </section>
+  <section>
+    <h2>Come si contano</h2>
+    <dl>
+      {% for name, how in described.values() %}<dt>{{ name }}</dt><dd>{{ how }}</dd>{% endfor %}
+    </dl>
+  </section>
+{% endblock %}

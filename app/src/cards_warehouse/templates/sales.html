@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Vendite · Magazzino{% endblock %}
+
+{% block content %}
+  <h1>Vendite</h1>
+  <p class="buttons">
+    {% for label, (first, last) in shortcuts.items() %}
+      <a class="button" href="/sales?{{ {'first_day': first, 'last_day': last, 'channel': form.channel} | urlencode }}">{{ label }}</a>
+    {% endfor %}
+  </p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="get" action="/sales">
+    <label for="first_day">Dal</label>
+    <input id="first_day" name="first_day" type="date" required value="{{ form.first_day }}">
+    <label for="last_day">Al</label>
+    <input id="last_day" name="last_day" type="date" required value="{{ form.last_day }}">
+    <label for="channel">Canale</label>
+    <select id="channel" name="channel">
+      <option value="">Tutti i canali</option>
+      {% for channel in channels %}
+        <option value="{{ channel.id }}" {% if form.channel == channel.id | string %}selected{% endif %}>{{ channel.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Mostra</button>
+  </form>
+  {% if history %}
+    <section>
+      <h2>Totali</h2>
+      <dl>
+        <dt>Incasso</dt><dd>{{ history.price_cents | euros }} €</dd>
+        <dt>Commissioni</dt><dd>{{ history.fee_cents | euros }} €</dd>
+        <dt>Margine</dt>
+        <dd>
+          {{ history.margin_cents | euros }} €
+          {% if history.cost_unknown %}<span class="tag">+{{ history.cost_unknown }} a costo sconosciuto</span>{% endif %}
+        </dd>
+      </dl>
+    </section>
+    <section>
+      <h2>Elenco</h2>
+      {% if history.sales %}
+        <table class="cards">
+          <thead>
+            <tr>
+              <th>Data</th><th>Articolo</th><th>Canale</th><th class="number">Copie</th><th class="number">Prezzo</th>
+              <th class="number">Commissione</th><th class="number">Spedizione</th><th class="number">Margine</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sale in history.sales %}
+              <tr>
+                <td data-label="Data">{{ sale.at | day }}</td>
+                {# Out of the totals: told apart at a glance. #}
+                <td data-label="Articolo">
+                  <a href="/sales/{{ sale.sale_id }}">{{ sale.item }}</a>
+                  {% if sale.cancelled %}<span class="tag">annullata · {{ cancellation_causes[sale.cancelled] }}</span>{% endif %}
+                  {% if sale.double %}<span class="tag">doppia vendita</span>{% endif %}
+                </td>
+                <td data-label="Canale">{{ sale.channel }}</td>
+                <td class="number" data-label="Copie">{{ sale.quantity }}</td>
+                <td class="number" data-label="Prezzo">{{ sale.price_cents | euros }} €</td>
+                <td class="number" data-label="Commissione">{{ sale.fee_cents | euros }} €</td>
+                <td class="number" data-label="Spedizione">{{ sale.shipping_cents | euros }} €</td>
+                {# A double sale took no copy: it has no cost, and no margin. #}
+                <td class="number" data-label="Margine">
+                  {% if sale.double %}—{% elif sale.margin is none %}non calcolabile{% else %}{{ sale.margin.cents | euros }} € · {{ sale.margin.percent | percent }} %{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>Nessuna vendita nel periodo.</p>
+      {% endif %}
+    </section>
+  {% endif %}
+{% endblock %}

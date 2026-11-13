@@ -59,6 +59,23 @@ the pod from starting, and the pod events name it. */}}
       name: {{ include "cards-warehouse.secretName" $ }}
       key: {{ . }}
 {{- end }}
+{{ include "cards-warehouse.ebayEnv" . }}
+{{- end }}
+
+{{/* The eBay the pods work on, which names its folder in Infisical. Any other value stops the render: a typo would
+leave the app without its eBay values, unable to tell which eBay to ask. */}}
+{{- define "cards-warehouse.ebayEnvironment" -}}
+{{- if not (has .Values.ebay.environment (list "sandbox" "production")) }}
+{{- fail (printf "ebay.environment is sandbox or production, not %q" .Values.ebay.environment) }}
+{{- end }}
+{{- .Values.ebay.environment }}
+{{- end }}
+
+{{/* What the app and the worker know of eBay: which one they work on, and its values, each left unset while missing
+from Infisical. */}}
+{{- define "cards-warehouse.ebayEnv" -}}
+- name: EBAY_ENVIRONMENT
+  value: {{ include "cards-warehouse.ebayEnvironment" . }}
 {{- range .Values.optionalSecrets }}
 - name: {{ . }}
   valueFrom:

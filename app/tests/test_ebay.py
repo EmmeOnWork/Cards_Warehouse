@@ -25,7 +25,7 @@ def test_the_ebay_page_shows_a_connected_sandbox_account_and_when_its_authorizat
     assert "23/04/2028" in page
 
 
-# Task 37 swaps the values in Infisical: the app then asks the real eBay, never the sandbox, and says so.
+# ebay.environment production in the chart: the app then asks the real eBay, never the sandbox, and says so.
 def test_with_the_real_account_the_app_asks_the_real_ebay_and_the_page_says_so(monkeypatch):
     connect_account(monkeypatch, environment="production")
 
@@ -118,7 +118,8 @@ def test_no_ebay_credential_reaches_the_log_or_the_page(monkeypatch, caplog, tro
         assert credential not in page
 
 
-# What Manuel puts in Infisical: the keys from the developer portal, and what make ebay-connect prints.
+# What Manuel puts in Infisical: the keys from the developer portal, and what make ebay-connect prints. The
+# environment the chart gives.
 def connect_account(monkeypatch, environment: str = "sandbox") -> None:
     monkeypatch.setenv("EBAY_ENVIRONMENT", environment)
     monkeypatch.setenv("EBAY_CLIENT_ID", CLIENT_ID)

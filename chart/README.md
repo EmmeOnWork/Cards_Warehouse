@@ -3,9 +3,9 @@
 Helm chart that packages the application for Kubernetes: a Deployment, a NodePort Service, PostgreSQL, the CronJob of the daily check, the Deployment of the worker, and the two resources of the Infisical operator that bring the app its secrets:
 
 - `InfisicalAuth`: signs in to Infisical as the cluster's machine identity, with the credential Terraform puts in the `infisical` namespace;
-- `InfisicalStaticSecret`: copies two folders of Infisical, the app's `/app` and `/aws`, into the Secret `cards-warehouse-secrets`, which it owns, and reads them again every minute.
+- `InfisicalStaticSecret`: copies three folders of Infisical, the app's `/app`, `/aws` and the folder of the eBay the app works on, `/ebay/sandbox` or `/ebay/production` (`ebay.environment`), into the Secret `cards-warehouse-secrets`, which it owns, and reads them again every minute.
 
-The Deployment gives the app each secret listed in `secrets` and `optionalSecrets` as an environment variable from that Secret. A name of `optionalSecrets` missing from Infisical leaves the variable unset instead of stopping the pod: these are the eBay values, which exist only once the account is connected ([docs/ebay.md](../docs/ebay.md)). When a value changes, the operator restarts the Deployment (annotation `secrets.infisical.com/auto-reload`), since the app reads its secrets only at start.
+The Deployment gives the app each secret listed in `secrets` and `optionalSecrets` as an environment variable from that Secret. A name of `optionalSecrets` missing from Infisical leaves the variable unset instead of stopping the pod: these are the eBay values, which exist only once the account is connected ([docs/ebay.md](../docs/ebay.md)). The app and the worker also get `EBAY_ENVIRONMENT`, from `ebay.environment`: switching to the real account is a commit of that value ([docs/ebay.md](../docs/ebay.md#switching-to-the-real-account)). When a value changes, the operator restarts the Deployment (annotation `secrets.infisical.com/auto-reload`), since the app reads its secrets only at start.
 
 The app's pods run as the ServiceAccount `cards-warehouse`. A Role in Velero's namespace lets it list Velero's `Backup` objects and nothing else, so the home page can show the outcome of the last backup ([backup-reader.yaml](templates/backup-reader.yaml)).
 
@@ -73,8 +73,9 @@ new version ─► new pod: init container migrate ─► app starts ─► Read
 | `image.repository` | `ghcr.io/emmeonwork/cards-warehouse` | Public image on GHCR: the node pulls it with no credentials |
 | `image.tag` | none, required | The commit to run |
 | `secrets` | `[SESSION_SECRET, PASSWORD_HASH, PGPASSWORD, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]` | The secrets the app needs, by name only: the list in Git. A name missing from Infisical keeps the pod from starting |
-| `optionalSecrets` | the nine `EBAY_*` | The secrets the app can start without: missing from Infisical, the variable is not set |
-| `infisical.projectSlug`, `.environment`, `.secretPath`, `.awsPath` | the project, `prod`, `/app`, `/aws` | Where the values live in Infisical |
+| `optionalSecrets` | the eight `EBAY_*` | The secrets the app can start without: missing from Infisical, the variable is not set |
+| `ebay.environment` | `sandbox` | The eBay the app and the worker work on, `sandbox` or `production`: the folder of Infisical the operator copies, and `EBAY_ENVIRONMENT`. Any other value stops the render |
+| `infisical.projectSlug`, `.environment`, `.secretPath`, `.awsPath`, `.ebayPath` | the project, `prod`, `/app`, `/aws`, `/ebay` | Where the values live in Infisical |
 | `photos.bucket`, `photos.region` | `emmeonwork-cards-warehouse-photos`, `eu-north-1` | The bucket of the item photos, from the foundations |
 | `infisical.refreshInterval` | `60s` | How often the operator reads Infisical again |
 | `infisical.credentials` | `infisical-credentials` in `infisical` | The Secret Terraform creates with the cluster's credential |
@@ -101,5 +102,6 @@ It runs, in the toolbox:
 1. `helm lint --strict`: the chart is well formed.
 2. `helm template | kubeconform -strict`: what the chart renders is valid against the schemas of Kubernetes 1.34.3, the version of the cluster, with no unknown field. The Infisical kinds are checked against the schemas of the community [CRD catalog](https://github.com/datreeio/CRDs-catalog), pinned by commit.
 3. `kubeconform -strict gitops`: the same check on the manifests Argo CD applies from [gitops/](../gitops/), its `Application` kind included. The values an `Application` passes to a chart are not checked, since no schema describes them.
+4. [tests/ebay-environment.sh](tests/ebay-environment.sh): the switch between the sandbox and the real account. With `ebay.environment` set to `production`, the app and the worker get the keys of `/ebay/production` and not the sandbox's. Without it, the sandbox's only. Any other value stops the render.
 
 Helm is 4.2.1, the version Argo CD 3.5.4 renders charts with, so the checks see the same manifests as the cluster.

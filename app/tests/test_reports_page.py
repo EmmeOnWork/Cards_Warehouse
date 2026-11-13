@@ -4,11 +4,14 @@
 Through the app's HTTP routes, on a real PostgreSQL.
 """
 
+import csv
 from datetime import datetime, timedelta
 
 from cards_warehouse.backups import LOCAL_TIME
+from tests import test_partner_balances
 from tests.pages import buttons, form_fields, links, sections, table_rows, text
 from tests.test_bulk_selling import bulk_of_two_lots
+from tests.test_purchase_loading import BOXES, add_partner
 from tests.test_selling import MEW, sell
 
 MONTHS = (
@@ -75,6 +78,86 @@ def test_the_margin_of_any_period_is_shown_from_its_first_day_to_its_last(signed
     ]
 
 
+# Three boxes of 104,00 €, half Luca's: one sold by Manuel on Vinted, which keeps nothing, at 60,00 €. It cost 34,67 €
+# and left 25,33 €, 73,06 %; of its net, 30,00 € are Manuel's and 30,00 € Luca's. The file opens in Excel set for
+# Italy: a BOM for the accents, the columns split by a semicolon, the amounts with a decimal comma.
+def test_the_sales_of_a_period_download_as_a_file_for_excel_with_the_part_of_each_partner(signed_in_client):
+    luca = add_partner(signed_in_client, "Luca")
+    shared = {**BOXES, "partner": ["", luca], "percent": ["50", "50"], "paid": ["0", "104,00"]}
+    boxes = signed_in_client.post("/items", data=shared).url.path
+    test_partner_balances.sell(
+        signed_in_client, boxes, channel="Vinted", collected_by="Manuel", quantity="1", price="60"
+    )
+    today = datetime.now(LOCAL_TIME).date()
+    shown = signed_in_client.get("/reports", params={"first_day": f"{today}", "last_day": f"{today}"})
+
+    downloaded = signed_in_client.get(links(sections(shown.text)["Periodo"])["Scarica le vendite del periodo (CSV)"])
+
+    assert downloaded.headers["content-type"] == "text/csv; charset=utf-8"
+    assert downloaded.headers["content-disposition"] == f'attachment; filename="vendite-{today}-{today}.csv"'
+    assert downloaded.content.startswith("\N{BYTE ORDER MARK}".encode())
+    assert csv_lines(downloaded) == [
+        [
+            "Data",
+            "Articolo",
+            "Canale",
+            "Quantità",
+            "Prezzo",
+            "Commissione",
+            "Spedizione",
+            "Costo",
+            "Margine €",
+            "Margine %",
+            "Ha incassato",
+            "Parte Manuel",
+            "Parte Luca",
+        ],
+        [
+            f"{today:%d/%m/%Y}",
+            "Booster box Evoluzioni a Paldea",
+            "Vinted",
+            "1",
+            "60,00",
+            "0,00",
+            "0,00",
+            "34,67",
+            "25,33",
+            "73,06",
+            "Manuel",
+            "30,00",
+            "30,00",
+        ],
+    ]
+
+
+# A Pikachu bought long ago by Manuel alone, at a cost not known, sold on eBay at 30,00 €: no cost nor margin can be
+# told, and Luca has no part of it. Those cells are empty, and Excel sums them as nothing.
+def test_in_the_file_a_cost_not_known_and_a_partner_with_no_part_are_empty_cells(signed_in_client):
+    add_partner(signed_in_client, "Luca")
+    pikachu = {**MEW, "name": "Pikachu", "total_cost": "", "unknown_cost": "on"}
+    sell(signed_in_client, signed_in_client.post("/items", data=pikachu).url.path, channel="eBay", price="30")
+    today = datetime.now(LOCAL_TIME).date()
+
+    downloaded = signed_in_client.get("/reports/sales.csv", params={"first_day": f"{today}", "last_day": f"{today}"})
+
+    [_, line] = csv_lines(downloaded)
+    assert line == [
+        f"{today:%d/%m/%Y}",
+        "Pikachu",
+        "eBay",
+        "1",
+        "30,00",
+        "0,00",
+        "0,00",
+        "",
+        "",
+        "",
+        "Manuel",
+        "30,00",
+        "",
+    ]
+
+
 # The days come back in the form, for Manuel to fix the one he got wrong.
 def test_a_period_whose_first_day_comes_after_its_last_is_refused_with_the_days_typed(signed_in_client):
     refused = signed_in_client.get("/reports", params={"first_day": "2026-10-31", "last_day": "2026-10-01"})
@@ -102,6 +185,19 @@ def test_the_capital_idle_is_what_the_copies_available_cost_of_each_kind_and_all
         ["Bulk", "11", "12,00 €"],
         ["Totale", "21 +1 a costo sconosciuto", "116,00 €"],
     ]
+
+
+# The link comes only with a period shown: an address typed by hand, with the days the wrong way round, makes no file.
+def test_the_file_of_a_period_whose_first_day_comes_after_its_last_is_refused(signed_in_client):
+    refused = signed_in_client.get("/reports/sales.csv", params={"first_day": "2026-10-31", "last_day": "2026-10-01"})
+
+    assert refused.status_code == 422
+    assert refused.text == "Il primo giorno viene dopo l'ultimo."
+
+
+def csv_lines(downloaded) -> list[list[str]]:
+    """The cells of each line of a file of sales, as Excel splits them: by the semicolon, past the BOM."""
+    return list(csv.reader(downloaded.content.decode("utf-8-sig").splitlines(), delimiter=";"))
 
 
 def this_month() -> str:

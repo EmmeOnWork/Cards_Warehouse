@@ -59,7 +59,6 @@ def values_for_infisical(
         )
     expires = now + timedelta(seconds=answer["refresh_token_expires_in"])
     return {
-        "EBAY_ENVIRONMENT": environment,
         "EBAY_REFRESH_TOKEN": answer["refresh_token"],
         "EBAY_AUTHORIZATION_EXPIRES": f"{expires:%Y-%m-%dT%H:%M:%SZ}",
     }
@@ -92,7 +91,7 @@ if __name__ == "__main__":
     except ConnectFailed as failure:
         sys.exit(str(failure))
     # Shown once, here, and nowhere else: no file, no log. The pod gets them from Infisical within a minute.
-    print("\nPut these in Infisical, project cards-warehouse, environment prod, folder /app,")
+    print(f"\nPut these in Infisical, project cards-warehouse, environment prod, folder /ebay/{environment},")
     print("next to EBAY_CLIENT_ID and EBAY_CLIENT_SECRET:\n")
     for name, value in values.items():
         print(f"{name}={value}")

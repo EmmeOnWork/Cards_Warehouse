@@ -31,6 +31,7 @@
     summary { padding: .625rem 0; cursor: pointer; }
     button, .button { padding: .5rem 1rem; border: 0; border-radius: .375rem; background: var(--accent); color: #fff; }
     .button { display: inline-flex; align-items: center; min-height: 2.75rem; text-decoration: none; }
+    .buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
     .error { color: #dc2626; font-weight: 600; }
     /* The photos of an item, as wide as the screen, with their buttons below. */
     figure { margin: 0 0 1.5rem; }
@@ -40,6 +41,14 @@
     /* The texts of a listing as they are pasted on the channel, with their lines. A link breaks anywhere. */
     .listing-text { white-space: pre-line; padding: .5rem; border: 1px solid var(--line); border-radius: .375rem; }
     td.link { overflow-wrap: anywhere; }
+    /* A table of too many columns for the phone: there each row is a card, each cell a line with its heading. */
+    @media (max-width: 40rem) {
+      table.cards thead { display: none; }
+      table.cards tr { display: block; padding: .5rem 0; border-bottom: 1px solid var(--line); }
+      table.cards td { display: flex; justify-content: space-between; gap: 1rem; padding: .125rem .25rem; border: 0;
+                       text-align: right; }
+      table.cards td::before { content: attr(data-label); font-weight: 600; text-align: left; }
+    }
     /* The load and edit pages ask only for the fields of the kind chosen, and of the card graded or not. */
     .load [data-for] { display: none; }
     .load:has(#kind [value=single_card]:checked) [data-for~=single_card],
@@ -52,7 +61,7 @@
   <header>
     <a href="/">Magazzino</a>
     {% if request.session.get("signed_in") %}
-      <nav><a href="/items">Articoli</a><a href="/actions">Da fare</a><a href="/purchases">Acquisti</a><a href="/reports">Conti</a><a href="/bulk">Bulk</a><a href="/channels">Canali</a><a href="/lives">Live</a><a href="/double-sales">Doppie vendite</a><a href="/ebay">eBay</a><a href="/check">Controllo</a></nav>
+      <nav><a href="/items">Articoli</a><a href="/actions">Da fare</a><a href="/purchases">Acquisti</a><a href="/sales">Vendite</a><a href="/reports">Conti</a><a href="/bulk">Bulk</a><a href="/channels">Canali</a><a href="/lives">Live</a><a href="/double-sales">Doppie vendite</a><a href="/ebay">eBay</a><a href="/check">Controllo</a></nav>
       <form method="post" action="/logout"><button type="submit">Esci</button></form>
     {% endif %}
   </header>

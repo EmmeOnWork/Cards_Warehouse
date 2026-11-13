@@ -212,7 +212,7 @@ def _record() -> None:
     from tests.acceptance.containers import running_postgres
 
     # Never the real account: the scenario publishes three listings.
-    print("Records eBay's answers on the sandbox. The values of Infisical, /app, of the sandbox:")
+    print("Records eBay's answers on the sandbox. The values of Infisical, /ebay/sandbox:")
     client_id = input("Client ID (EBAY_CLIENT_ID): ").strip()
     client_secret = getpass.getpass("Client secret (EBAY_CLIENT_SECRET): ").strip()
     refresh_token = getpass.getpass("Durable credential (EBAY_REFRESH_TOKEN): ").strip()

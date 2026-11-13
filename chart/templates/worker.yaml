@@ -49,14 +49,7 @@ spec:
               value: {{ .Values.photos.bucket }}
             - name: PHOTOS_REGION
               value: {{ .Values.photos.region }}
-            {{- range .Values.optionalSecrets }}
-            - name: {{ . }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "cards-warehouse.secretName" $ }}
-                  key: {{ . }}
-                  optional: true
-            {{- end }}
+            {{- include "cards-warehouse.ebayEnv" . | nindent 12 }}
           # The same as the app's: it loads the same code, and does less.
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

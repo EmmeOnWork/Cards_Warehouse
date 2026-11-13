@@ -131,7 +131,8 @@ if __name__ == "__main__":
     environment = input("Environment, sandbox or production [sandbox]: ").strip() or "sandbox"
     if environment not in ENVIRONMENT_NAMES:
         sys.exit("The environment is sandbox or production.")
-    # The values of Infisical, /app: the same make ebay-connect printed, or the keys of the portal. Not echoed.
+    # The values of Infisical, /ebay/<environment>: the same make ebay-connect printed, or the keys of the portal.
+    # Not echoed.
     client_id = input("Client ID (EBAY_CLIENT_ID): ").strip()
     client_secret = getpass.getpass("Client secret (EBAY_CLIENT_SECRET): ").strip()
     refresh_token = getpass.getpass("Durable credential (EBAY_REFRESH_TOKEN): ").strip()
@@ -153,6 +154,6 @@ if __name__ == "__main__":
             values = values_for_infisical(account, postal_code=postal_code, city=city, choose=_choose_on_screen)
         except SetupFailed as failure:
             sys.exit(str(failure))
-    print("\nPut these in Infisical, project cards-warehouse, environment prod, folder /app:\n")
+    print(f"\nPut these in Infisical, project cards-warehouse, environment prod, folder /ebay/{environment}:\n")
     for name, value in values.items():
         print(f"{name}={value}")

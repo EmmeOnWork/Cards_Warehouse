@@ -14,6 +14,7 @@ from cards_warehouse import (
     backups,
     bulk_pages,
     channel_pages,
+    curriculum_pages,
     daily_check_pages,
     ebay,
     extraction_pages,
@@ -108,6 +109,7 @@ def create_app(
     app.include_router(purchase_pages.router)
     app.include_router(sale_pages.router)
     app.include_router(report_pages.router)
+    app.include_router(curriculum_pages.router)
     app.include_router(bulk_pages.router)
     app.include_router(live_pages.router)
     app.include_router(daily_check_pages.router)
