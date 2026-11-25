@@ -9,7 +9,7 @@
     <section>
       <h2>In attesa di nuovo tentativo</h2>
       <p>L'app ci riprova da sola: qui non c'è niente da fare.</p>
-      <ul>
+      <ul class="rows">
         {% for operation in waiting %}
           <li><a href="/items/{{ operation.listing.item_id }}">{{ action_kinds[operation.kind] }} su {{ operation.listing.channel }} {{ names[operation.listing.item_id] }}</a></li>
         {% endfor %}
@@ -21,7 +21,7 @@
     <section>
       <h2>{{ channel }}</h2>
       <p>{{ actions | length }} da fare</p>
-      <ul>
+      <ul class="rows">
         {% for action in actions %}
           <li><a href="/actions/{{ action.id }}">{{ action_kinds[action.kind] }} {{ names[action.listing.item_id] }}</a>
             {#- Left to Manuel on a channel the app acts on by itself, when its API did not do it. #}

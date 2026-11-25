@@ -12,12 +12,14 @@
     <form method="post" action="/actions/{{ action.id }}/done">
       {% if action.kind == "update" %}
         <p class="listing-text">Porta l'annuncio a {{ action.listing.quantity | copies }} a {{ action.listing.price_cents | euros }} €.</p>
-        <button type="button" data-copy="{{ action.listing.price_cents | euros }}">Copia il prezzo</button>
-        <button type="submit">Aggiornato</button>
+        <p class="buttons">
+          <button class="secondary" type="button" data-copy="{{ action.listing.price_cents | euros }}">Copia il prezzo</button>
+          <button type="submit">Aggiornato</button>
+        </p>
       {% else %}
         {# Sold out, or withdrawn from this channel only: either way it offers nothing anymore. #}
         <p class="listing-text">Chiudi l'annuncio su {{ action.listing.channel }}.</p>
-        <button type="submit">Chiuso</button>
+        <button class="wide" type="submit">Chiuso</button>
       {% endif %}
     </form>
   {% else %}
@@ -25,13 +27,13 @@
   {# Each with a tap, to paste in the channel's app: the price as its field takes it, without the euro sign. #}
   <h2>Titolo</h2>
   <p class="listing-text">{{ texts.title }}</p>
-  <button type="button" data-copy="{{ texts.title }}">Copia il titolo</button>
+  <button class="secondary" type="button" data-copy="{{ texts.title }}">Copia il titolo</button>
   <h2>Descrizione</h2>
   <p class="listing-text">{{ texts.description }}</p>
-  <button type="button" data-copy="{{ texts.description }}">Copia la descrizione</button>
+  <button class="secondary" type="button" data-copy="{{ texts.description }}">Copia la descrizione</button>
   <h2>Prezzo</h2>
   <p class="listing-text">{{ action.listing.price_cents | euros }} € · {{ action.listing.quantity }} {{ "copia" if action.listing.quantity == 1 else "copie" }}</p>
-  <button type="button" data-copy="{{ action.listing.price_cents | euros }}">Copia il prezzo</button>
+  <button class="secondary" type="button" data-copy="{{ action.listing.price_cents | euros }}">Copia il prezzo</button>
 
   <h2>Foto</h2>
   {% if photos %}
@@ -47,7 +49,7 @@
     {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
     <label for="link">Link dell'annuncio pubblicato</label>
     <input id="link" name="link" type="url" placeholder="https://" value="{{ typed_link }}" required>
-    <button type="submit">Pubblicato</button>
+    <button class="wide" type="submit">Pubblicato</button>
   </form>
   {% endif %}
 
@@ -55,7 +57,10 @@
     // The clipboard is open to a page served over HTTPS, as Tailscale serves the app to the phone.
     document.addEventListener("click", (event) => {
       const button = event.target.closest("[data-copy]");
-      if (button) navigator.clipboard.writeText(button.dataset.copy).then(() => { button.textContent = "Copiato"; });
+      if (button) navigator.clipboard.writeText(button.dataset.copy).then(() => {
+        button.textContent = "Copiato";
+        button.classList.add("copied");
+      });
     });
   </script>
 {% endblock %}

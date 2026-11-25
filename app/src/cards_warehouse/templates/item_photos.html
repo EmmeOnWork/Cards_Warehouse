@@ -10,10 +10,10 @@
       {% if loop.length > 1 %}
         <form method="post" action="{{ request.url.path }}/photos/{{ photo.id }}/move">
           {% if not loop.first %}
-            <button name="towards" value="earlier" aria-label="Sposta prima la foto {{ loop.index }}">↑</button>
+            <button class="secondary" name="towards" value="earlier" aria-label="Sposta prima la foto {{ loop.index }}">↑</button>
           {% endif %}
           {% if not loop.last %}
-            <button name="towards" value="later" aria-label="Sposta dopo la foto {{ loop.index }}">↓</button>
+            <button class="secondary" name="towards" value="later" aria-label="Sposta dopo la foto {{ loop.index }}">↓</button>
           {% endif %}
         </form>
       {% endif %}

@@ -1,10 +1,20 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <p{% if backup.alarm %} class="error"{% endif %}>{{ backup.text }}</p>
-  <p{% if check.alarm %} class="error"{% endif %}>{{ check.text }}</p>
-  {% if queue %}<p{% if queue.alarm %} class="error"{% endif %}>{{ queue.text }}</p>{% endif %}
-  {% if orders %}<p class="error">{{ orders.text }}</p>{% endif %}
   <h1>Magazzino</h1>
-  <p><a class="button" href="/password">Cambia password</a></p>
+  {# How things stand, each line green or red: the one with somewhere to fix it leads there. #}
+  <ul class="status">
+    <li{% if backup.alarm %} class="alarm"{% endif %}>{{ backup.text }}</li>
+    <li{% if check.alarm %} class="alarm"{% endif %}><a href="/check">{{ check.text }}</a></li>
+    {% if queue %}<li{% if queue.alarm %} class="alarm"{% endif %}><a href="/actions">{{ queue.text }}</a></li>{% endif %}
+    {% if orders %}<li class="alarm">{{ orders.text }}</li>{% endif %}
+  </ul>
+  {# The way to an item, to sell it or look at it: straight into the list, searched. #}
+  <form method="get" action="/items" role="search">
+    <input type="search" name="q" aria-label="Cerca un articolo" placeholder="Cerca un articolo" enterkeyhint="search">
+  </form>
+  <div class="tiles">
+    <a class="tile" href="/actions">{% if to_do %}<strong>{{ to_do }}</strong> da fare{% else %}Niente da fare{% endif %}</a>
+    <a class="tile main" href="/items/new">Carica un articolo</a>
+  </div>
 {% endblock %}

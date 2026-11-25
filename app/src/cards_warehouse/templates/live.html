@@ -19,7 +19,7 @@
               <td class="number">
                 {% if row.tilt_price_cents is none %}costo sconosciuto{% else %}{{ row.tilt_price_cents | euros }} €{% endif %}
               </td>
-              <td><button name="item_id" value="{{ row.item_id }}" aria-label="Togli {{ row.name }}">Togli</button></td>
+              <td><button class="secondary" name="item_id" value="{{ row.item_id }}" aria-label="Togli {{ row.name }}">Togli</button></td>
             </tr>
           {% endfor %}
         </tbody>
@@ -38,7 +38,7 @@
   {% if q %}
     {% if found %}
       <form method="post" action="/lives/{{ inventory_id }}/items">
-        <ul>
+        <ul class="rows">
           {% for item in found %}
             <li>
               {{ item.name }} · {{ item.available }}
@@ -72,7 +72,7 @@
                   {# Once confirmed, a row is a sale: it no longer comes off here. #}
                   <td>
                     {% if row.sale_id %}<a href="/sales/{{ row.sale_id }}">Venduta</a>
-                    {% else %}<button name="row_id" value="{{ row.id }}" aria-label="Togli la riga {{ loop.index }}">Togli</button>{% endif %}
+                    {% else %}<button class="secondary" name="row_id" value="{{ row.id }}" aria-label="Togli la riga {{ loop.index }}">Togli</button>{% endif %}
                   </td>
                 </tr>
               {% endfor %}
@@ -96,7 +96,7 @@
       </form>
       {% if entered | rejectattr("sale_id") | list %}
         <form method="post" action="/lives/{{ inventory_id }}/confirm">
-          <button type="submit">Conferma vendite</button>
+          <button class="wide" type="submit">Conferma vendite</button>
         </form>
       {% endif %}
     </section>

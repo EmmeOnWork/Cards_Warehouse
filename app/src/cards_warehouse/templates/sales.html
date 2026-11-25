@@ -6,7 +6,7 @@
   <h1>Vendite</h1>
   <p class="buttons">
     {% for label, (first, last) in shortcuts.items() %}
-      <a class="button" href="/sales?{{ {'first_day': first, 'last_day': last, 'channel': form.channel} | urlencode }}">{{ label }}</a>
+      <a class="button secondary" href="/sales?{{ {'first_day': first, 'last_day': last, 'channel': form.channel} | urlencode }}">{{ label }}</a>
     {% endfor %}
   </p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}

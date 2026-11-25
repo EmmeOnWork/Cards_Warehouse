@@ -21,7 +21,7 @@
                 {% if piece.estimated_value %} · stimata {{ piece.estimated_value }} €{% endif %}
               </td>
               <td>
-                <button type="submit" name="remove_piece" value="{{ loop.index0 }}" formnovalidate
+                <button class="secondary" type="submit" name="remove_piece" value="{{ loop.index0 }}" formnovalidate
                         aria-label="Togli {{ piece.name }}">Togli</button>
               </td>
             </tr>
@@ -47,7 +47,7 @@
     <label for="estimated_value">Valore stimato di una copia, in euro, se l'acquisto ha più pezzi</label>
     <input id="estimated_value" name="estimated_value" inputmode="decimal" placeholder="200,00"
            value="{{ form.estimated_value }}">
-    <button type="submit" name="add_piece" value="true">Aggiungi un altro pezzo</button>
+    <button class="secondary" type="submit" name="add_piece" value="true">Aggiungi un altro pezzo</button>
 
     {# The cost of all the copies: the app splits it among them, with the shipping. #}
     <label for="total_cost">Costo totale, in euro</label>
@@ -86,7 +86,7 @@
       </table>
     </details>
 
-    <button type="submit">Carica</button>
+    <button class="wide" type="submit">Carica</button>
   </form>
   {% include "item_suggestions.html" %}
 {% endblock %}

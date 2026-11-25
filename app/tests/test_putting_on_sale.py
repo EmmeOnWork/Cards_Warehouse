@@ -68,6 +68,18 @@ def test_the_actions_are_grouped_by_channel_each_saying_how_many_are_left(signed
     assert list(checkboxes(signed_in_client.get(box_page).text, "channel")) == ["eBay"]
 
 
+# On the home, how many actions are left on every channel together, a tap away from them.
+def test_the_home_says_how_many_actions_are_left_and_leads_to_them(signed_in_client):
+    nothing_yet = text(signed_in_client.get("/").text)
+    _on_sale(signed_in_client, BOOSTER_BOX, "Vinted", "Tilt")
+    _on_sale(signed_in_client, MEW, "Vinted")
+
+    home = signed_in_client.get("/").text
+
+    assert "Niente da fare" in nothing_yet
+    assert links(home)["3 da fare"] == "/actions"
+
+
 # From the phone: a tap copies each text, to paste in Vinted's app; the price as its field takes it, without the
 # euro sign. The photos to save in the camera roll are there too.
 def test_an_action_to_publish_offers_the_title_the_description_and_the_price_to_copy_and_the_photos(

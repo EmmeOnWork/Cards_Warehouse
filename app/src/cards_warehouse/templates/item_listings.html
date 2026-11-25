@@ -26,7 +26,7 @@
     {# Off one channel, by Manuel's choice: the others go on offering it. #}
     {% for listing in listings if listing.status != "to_close" %}
       <form method="post" action="/listings/{{ listing.id }}/withdraw">
-        <button type="submit">Ritira da {{ listing.channel }}</button>
+        <button class="secondary" type="submit">Ritira da {{ listing.channel }}</button>
       </form>
     {% endfor %}
     {# Why a channel refused a listing, and a tap to ask it again once that is fixed. An update or a close its API did

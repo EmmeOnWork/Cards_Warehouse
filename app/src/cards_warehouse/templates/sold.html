@@ -84,7 +84,7 @@
   <section>
     <h2>Da fare</h2>
     {% if actions %}
-      <ul>
+      <ul class="rows">
         {% for action in actions %}
           <li><a href="/actions/{{ action.id }}">{{ action_kinds[action.kind] }} su {{ action.listing.channel }}</a></li>
         {% endfor %}
@@ -110,7 +110,7 @@
         <label for="cancellation-note">Nota, se vuoi</label>
         <input id="cancellation-note" name="note" placeholder="Arrivata piegata" value="{{ form.note }}">
 
-        <button type="submit">Annulla la vendita</button>
+        <button class="danger" type="submit">Annulla la vendita</button>
       </form>
     </section>
   {% endif %}

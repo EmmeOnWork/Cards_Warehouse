@@ -9,7 +9,7 @@
         <tr>
           <td>{{ name }} × {{ card.quantity }} · stimata {{ card.estimated_value }} €</td>
           <td>
-            <button type="submit" name="remove_card" value="{{ loop.index0 }}" formnovalidate
+            <button class="secondary" type="submit" name="remove_card" value="{{ loop.index0 }}" formnovalidate
                     aria-label="Togli {{ name }}">Togli</button>
           </td>
         </tr>
@@ -45,7 +45,7 @@
 <input id="estimated_value" name="estimated_value" inputmode="decimal" placeholder="50,00"
        value="{{ form.estimated_value }}">
 {# The bulk is typed last: its fields, still empty, do not stop a card being added. #}
-<button type="submit" name="add_card" value="true" formnovalidate>Aggiungi un'altra carta</button>
+<button class="secondary" type="submit" name="add_card" value="true" formnovalidate>Aggiungi un'altra carta</button>
 
 <h3>Il resto, nel bulk</h3>
 <label for="bulk_cards">Carte, anche a occhio</label>

@@ -45,7 +45,7 @@
   {% with item_id=item.id, typed={"fixed_price": fixed | euros if fixed else ""} %}{% include "fixed_price_form.html" %}{% endwith %}
   {% if fixed %}
     <form method="post" action="/items/{{ item.id }}/fixed-price/delete">
-      <button type="submit">Togli il prezzo fissato</button>
+      <button class="secondary" type="submit">Togli il prezzo fissato</button>
     </form>
   {% endif %}
 
@@ -54,7 +54,7 @@
     {# The promotion over: the channel is back at the price of the others. #}
     {% for row in proposal.per_channel if row.forced %}
       <form method="post" action="/items/{{ item.id }}/forced-prices/delete">
-        <button type="submit" name="channel" value="{{ row.channel }}">Togli il prezzo forzato su {{ row.channel }}</button>
+        <button class="secondary" type="submit" name="channel" value="{{ row.channel }}">Togli il prezzo forzato su {{ row.channel }}</button>
       </form>
     {% endfor %}
   {% endif %}

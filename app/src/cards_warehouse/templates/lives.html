@@ -31,11 +31,11 @@
   {% if presets %}
     {# A new inventory with the preset's items: changing it leaves the preset as it is. #}
     <form method="post" action="/lives">
-      <ul>
+      <ul class="rows">
         {% for preset in presets %}
           <li>
             {{ preset.name }}
-            <button name="preset" value="{{ preset.id }}" aria-label="Parti da {{ preset.name }}">Parti da questa</button>
+            <button class="secondary" name="preset" value="{{ preset.id }}" aria-label="Parti da {{ preset.name }}">Parti da questa</button>
           </li>
         {% endfor %}
       </ul>
